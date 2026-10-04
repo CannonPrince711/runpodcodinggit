@@ -49,8 +49,8 @@ If it matters and isn't on `/workspace`, it doesn't exist tomorrow.
 |---|---|---|
 | Qwen 14B weights | ~9 GB | Ollama blobs |
 | Qwen 32B weights (optional) | ~20 GB | Future headroom |
-| Python / node / build caches | 5–8 GB | pip cache, nuget, tree-sitter |
-| pip cache + repo maps | ~3 GB | Fast Aider reinstall + `.aider.tags.cache` |
+| Node / build caches | 5–8 GB | npm, nuget |
+| Aider repo maps | ~1 GB | `.aider.tags.cache` |
 | code-server extensions & user data | 1–2 GB | C# Dev Kit, C++ tools, GitLens |
 | Game modding tools | 5–10 GB | BepInEx, MelonLoader, UE4SS, ILSpy |
 | Mod projects + decompiled assemblies | 15–25 GB | Grows fastest; multiple games |
@@ -101,7 +101,6 @@ export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
 
 # Caches — persistent
-export PIP_CACHE_DIR=/workspace/dev-env/pip-cache
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 
@@ -121,7 +120,7 @@ alias ollog='tail -f /workspace/ollama.log'
 EOF
 
 source ~/.bashrc
-mkdir -p $OLLAMA_MODELS $HF_HOME $PIP_CACHE_DIR $npm_config_cache $NUGET_PACKAGES
+mkdir -p $OLLAMA_MODELS $HF_HOME $npm_config_cache $NUGET_PACKAGES
 ```
 
 ---
@@ -136,7 +135,7 @@ apt install -y \
   htop nvtop ncdu ripgrep fd-find \
   nano vim micro tmux sqlite3 \
   python3-venv python3-pip \
-  file ranger nnn mc p7zip-full zstd
+  file ranger nnn mc p7zip-full zstd pciutils lshw
 ```
 
 Optional but recommended for .NET/Unity modding:
@@ -247,10 +246,10 @@ git config --global init.defaultBranch main
 git config --global --add safe.directory '*'
 
 # The venv lives on the container disk (/opt): the network volume refuses chmod, which pip needs.
-# post_restart.sh rebuilds it after each restart, using the pip cache on /workspace.
+# post_restart.sh rebuilds it after each restart (about a minute).
 python3 -m venv /opt/aider-env
-/opt/aider-env/bin/pip install --upgrade pip
-/opt/aider-env/bin/pip install aider-chat
+/opt/aider-env/bin/pip install --no-cache-dir --upgrade pip
+/opt/aider-env/bin/pip install --no-cache-dir aider-chat
 
 /opt/aider-env/bin/aider --version
 ```
@@ -482,7 +481,6 @@ export HF_HOME=/workspace/models/huggingface
 export HUGGINGFACE_HUB_CACHE=/workspace/models/huggingface/hub
 export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
-export PIP_CACHE_DIR=/workspace/dev-env/pip-cache
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
@@ -510,12 +508,12 @@ git config --global --add safe.directory '*'
 
 # --- 3. System deps (apt lists are wiped with the container disk, so update first) ---
 export DEBIAN_FRONTEND=noninteractive
-if ! command -v tmux >/dev/null || ! command -v dotnet >/dev/null; then
+if ! command -v tmux >/dev/null || ! command -v dotnet >/dev/null || ! command -v lspci >/dev/null; then
   apt-get update -qq
   apt-get install -y -qq \
     git curl wget unzip zip tar jq tree build-essential cmake pkg-config \
     htop nvtop ncdu ripgrep fd-find nano vim micro tmux sqlite3 \
-    python3-venv python3-pip file ranger nnn mc p7zip-full zstd \
+    python3-venv python3-pip file ranger nnn mc p7zip-full zstd pciutils lshw \
     dotnet-sdk-8.0
 fi
 
@@ -531,10 +529,11 @@ pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 
 if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
   echo "    rebuilding aider venv..."
   rm -rf /opt/aider-env
-  # Lives on the container disk: the network volume refuses chmod, which pip needs. pip cache on /workspace keeps reinstalls fast.
+  # Lives on the container disk: the network volume refuses chmod, which pip needs.
+  # --no-cache-dir: pip can't use a cache on the volume (ownership), and it's a one-off install anyway.
   python3 -m venv /opt/aider-env
-  /opt/aider-env/bin/pip install -q --upgrade pip
-  /opt/aider-env/bin/pip install -q aider-chat
+  /opt/aider-env/bin/pip install -q --no-cache-dir --upgrade pip
+  /opt/aider-env/bin/pip install -q --no-cache-dir aider-chat
 fi
 
 # --- 6. code-server ---

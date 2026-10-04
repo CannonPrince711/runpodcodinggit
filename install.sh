@@ -7,7 +7,7 @@ echo "==> Creating directories"
 mkdir -p /workspace/{mods/shared-libraries,tools,scripts,docs,downloads}
 mkdir -p /workspace/ai/{aider,rules,prompts,context}
 mkdir -p /workspace/models/{ollama,huggingface}
-mkdir -p /workspace/dev-env/{pip-cache,npm-cache,nuget}
+mkdir -p /workspace/dev-env/{npm-cache,nuget}
 mkdir -p /workspace/code-server/{data/User,extensions}
 
 echo "==> Saving git identity"
@@ -30,7 +30,6 @@ export HF_HOME=/workspace/models/huggingface
 export HUGGINGFACE_HUB_CACHE=/workspace/models/huggingface/hub
 export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
-export PIP_CACHE_DIR=/workspace/dev-env/pip-cache
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
@@ -58,12 +57,12 @@ git config --global --add safe.directory '*'
 
 # --- 3. System deps (apt lists are wiped with the container disk, so update first) ---
 export DEBIAN_FRONTEND=noninteractive
-if ! command -v tmux >/dev/null || ! command -v dotnet >/dev/null; then
+if ! command -v tmux >/dev/null || ! command -v dotnet >/dev/null || ! command -v lspci >/dev/null; then
   apt-get update -qq
   apt-get install -y -qq \
     git curl wget unzip zip tar jq tree build-essential cmake pkg-config \
     htop nvtop ncdu ripgrep fd-find nano vim micro tmux sqlite3 \
-    python3-venv python3-pip file ranger nnn mc p7zip-full zstd \
+    python3-venv python3-pip file ranger nnn mc p7zip-full zstd pciutils lshw \
     dotnet-sdk-8.0
 fi
 
@@ -79,10 +78,11 @@ pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 
 if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
   echo "    rebuilding aider venv..."
   rm -rf /opt/aider-env
-  # Lives on the container disk: the network volume refuses chmod, which pip needs. pip cache on /workspace keeps reinstalls fast.
+  # Lives on the container disk: the network volume refuses chmod, which pip needs.
+  # --no-cache-dir: pip can't use a cache on the volume (ownership), and it's a one-off install anyway.
   python3 -m venv /opt/aider-env
-  /opt/aider-env/bin/pip install -q --upgrade pip
-  /opt/aider-env/bin/pip install -q aider-chat
+  /opt/aider-env/bin/pip install -q --no-cache-dir --upgrade pip
+  /opt/aider-env/bin/pip install -q --no-cache-dir aider-chat
 fi
 
 # --- 6. code-server ---
@@ -264,6 +264,14 @@ echo "==> Pulling Qwen models (first run downloads ~14 GB)"
 ollama pull qwen2.5-coder:14b-instruct
 [ "${PULL_7B:-1}" = "1" ] && ollama pull qwen2.5-coder:7b-instruct
 [ "${PULL_32B:-0}" = "1" ] && ollama pull qwen2.5-coder:32b-instruct
+
+echo "==> Checking Ollama sees the GPU"
+ollama run qwen2.5-coder:14b-instruct "say ok" >/dev/null 2>&1 || true
+if ollama ps | grep -q "GPU"; then
+  ollama ps | sed -n 2p | sed 's/^/    /'
+else
+  echo "    WARN: model is not on the GPU. Check: nvidia-smi, and grep -i 'inference compute' /workspace/ollama.log"
+fi
 
 echo "==> Installing code-server extensions"
 for ext in muhammad-sammy.csharp llvm-vs-code-extensions.vscode-clangd sumneko.lua ms-python.python \
