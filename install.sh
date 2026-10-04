@@ -248,6 +248,19 @@ git commit -qm "init: $1 mod workspace"
 echo "Created $DIR"
 __RPEOF1__
 
+cat > /workspace/scripts/aider-here.sh << '__RPEOF_AH__'
+#!/bin/bash
+# Open Aider for the game folder this terminal is in; otherwise ask which game.
+case "$PWD" in
+  /workspace/mods/*/*|/workspace/mods/*) GAME=$(echo "${PWD#/workspace/mods/}" | cut -d/ -f1) ;;
+esac
+if [ -z "$GAME" ] || [ "$GAME" = "shared-libraries" ]; then
+  echo "Games:"; ls -1 /workspace/mods | grep -v shared-libraries | sed 's/^/  /'
+  read -r -p "Open Aider for which game? " GAME
+fi
+[ -n "$GAME" ] && exec bash /workspace/scripts/mod.sh "$GAME"
+__RPEOF_AH__
+
 cat > /workspace/scripts/mod.sh << '__RPEOF2__'
 #!/bin/bash
 # Usage: mod <GameName>  [-- attach to tmux session ]
@@ -401,6 +414,7 @@ except FileNotFoundError:
     kb = []
 want = [
     {"key": "alt+l", "command": "continue.focusContinueInput"},
+    {"key": "alt+a", "command": "workbench.action.tasks.runTask", "args": "Aider: open for this mod"},
     {"key": "alt+i", "command": "continue.focusEdit", "when": "editorTextFocus"},
     {"key": "alt+i", "command": "continue.quickEdit", "when": "editorTextFocus"},
 ]
@@ -421,6 +435,8 @@ s.setdefault("search.exclude", {}).update({k: v for k, v in heavy.items() if "De
 s["search.followSymlinks"] = False
 s["git.autoRepositoryDetection"] = "openEditors"
 s["extensions.autoUpdate"] = False
+# "Aider" entry in the terminal panel's + dropdown
+s.setdefault("terminal.integrated.profiles.linux", {})["Aider"] = {"path": "bash", "args": ["/workspace/scripts/aider-here.sh"], "icon": "hubot"}
 s["gitlens.codeLens.enabled"] = False
 json.dump(s, open(p, "w"), indent=2)
 __RPEOF_PY__
@@ -459,7 +475,7 @@ echo
 echo "==> Done."
 echo "    code-server: RunPod Connect -> HTTP Services -> port 8080"
 echo "    password:    $(cat /workspace/code-server/password)"
-echo "    Aider in the editor: open a file in a mod, press Ctrl+Alt+A (or comment \"... AI!\" and save)"
+echo "    Aider in the editor: open a file in a mod, press Ctrl+Alt+A or Alt+A, or Terminal + dropdown -> Aider; comment \"... AI!\" and save to trigger it"
 echo "    Qwen Code agent: qmod Game_A   (or: cd /workspace/mods/Game_A && qwen)"
 echo "    Qwen in the editor: click the Continue icon in the left sidebar (chat: Alt+L, edit selection: Alt+I)"
 echo "    next:        source ~/.bashrc && newmod.sh Game_A && mod Game_A"

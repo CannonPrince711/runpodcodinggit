@@ -259,7 +259,7 @@ Open one game at a time (File → Open Folder → `/workspace/mods/Game_A`) for 
 
 ### Aider inside code-server
 
-Press **Ctrl+Alt+A** with any file from a mod open (or `Ctrl+Shift+P` → *Run Task* → *Aider: open for this mod*).
+Press **Alt+A** or **Ctrl+Alt+A** with any file from a mod open, or open the terminal panel's **+ ▾** dropdown and pick **Aider** (uses the game folder you're in, or asks) (or `Ctrl+Shift+P` → *Run Task* → *Aider: open for this mod*).
 Aider opens in a terminal panel inside the editor, in that game's folder, in the same tmux session `mod` uses.
 
 Aider also runs with `--watch-files`: write a comment ending in `AI!` in any file and save it, and Aider
