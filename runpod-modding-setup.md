@@ -248,7 +248,8 @@ code-server crawl, so code-server opens `/workspace/mods` and `install.sh` merge
 ```json
 "files.watcherExclude": { "/workspace/models/**": true, "/workspace/dev-env/**": true, "/workspace/code-server/**": true,
                           "/workspace/downloads/**": true, "**/Decompiled/**": true, "**/bin/**": true, "**/obj/**": true,
-                          "**/.git/objects/**": true, "**/.aider.tags.cache.v*/**": true },
+                          "**/.git/objects/**": true, "**/.aider.tags.cache.v*/**": true,
+                          "**/.gradle/**": true, "**/build/**": true, "**/run/**": true, "**/node_modules/**": true },
 "search.followSymlinks": false,
 "git.autoRepositoryDetection": "openEditors",
 "extensions.autoUpdate": false,

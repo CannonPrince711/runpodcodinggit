@@ -474,7 +474,8 @@ p = "/workspace/code-server/data/User/settings.json"
 s = json.load(open(p))
 heavy = {"/workspace/models/**": True, "/workspace/dev-env/**": True, "/workspace/code-server/**": True,
          "/workspace/downloads/**": True, "**/Decompiled/**": True, "**/bin/**": True, "**/obj/**": True,
-         "**/.git/objects/**": True, "**/.aider.tags.cache.v*/**": True}
+         "**/.git/objects/**": True, "**/.aider.tags.cache.v*/**": True,
+         "**/.gradle/**": True, "**/build/**": True, "**/run/**": True, "**/node_modules/**": True}
 s.setdefault("files.watcherExclude", {}).update(heavy)
 s.setdefault("search.exclude", {}).update({k: v for k, v in heavy.items() if "Decompiled" not in k})
 s["search.followSymlinks"] = False
