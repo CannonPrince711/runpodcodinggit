@@ -355,21 +355,19 @@ tmux new-session -s "$SESSION" -c "$DIR" \
 __RPEOF2__
 
 cat > /workspace/ai/aider/.aider.model.settings.yml << '__RPEOF3__'
-- name: gpt-4-turbo
+- name: ollama_chat/qwen2.5-coder:14b-instruct
   edit_format: diff
   use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
-    max_tokens: 8192
+    num_ctx: 32768
 
 
 __RPEOF3__
 
 cat > /workspace/ai/aider/.aider.conf.yml << '__RPEOF4__'
-model: gpt-4-turbo
-weak-model: gpt-4-turbo
-openai-api-base: http://127.0.0.1:11434/v1
-openai-api-key: ollama
+model: ollama_chat/qwen2.5-coder:14b-instruct
+weak-model: ollama_chat/qwen2.5-coder:14b-instruct
 model-settings-file: /workspace/ai/aider/.aider.model.settings.yml
 
 read:
