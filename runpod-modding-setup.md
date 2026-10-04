@@ -342,18 +342,18 @@ python3 -m venv /opt/aider-env
 /opt/aider-env/bin/aider --version
 ```
 
-### Model settings — critical context override
+### Model settings
 
-Ollama's default context is small (2048–4096 depending on version). Without this, Aider truncates silently.
+Aider uses the OpenAI-compatible endpoint provided by Ollama for better stability and to avoid repeat-loop issues with direct model references.
 
 ```bash
 cat > /workspace/ai/aider/.aider.model.settings.yml << 'EOF'
-- name: ollama/qwen2.5-coder:14b-instruct
+- name: gpt-4-turbo
   edit_format: diff
   use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
-    num_ctx: 32768
+    max_tokens: 8192
 
 
 EOF
@@ -361,10 +361,14 @@ EOF
 
 ### Aider config
 
+Points to the local Ollama OpenAI-compatible endpoint running on port 11434.
+
 ```bash
 cat > /workspace/ai/aider/.aider.conf.yml << 'EOF'
-model: ollama/qwen2.5-coder:14b-instruct
-weak-model: ollama/qwen2.5-coder:14b-instruct   # same model for commit messages, so nothing else loads
+model: gpt-4-turbo
+weak-model: gpt-4-turbo
+openai-api-base: http://127.0.0.1:11434/v1
+openai-api-key: ollama
 model-settings-file: /workspace/ai/aider/.aider.model.settings.yml
 
 read:
@@ -844,9 +848,10 @@ EOF
 
 | Problem | Fix |
 |---|---|
+| Aider repeating same response | Using native Ollama API—already fixed in installer (uses OpenAI endpoint) |
 | Aider ignores file contents | Check `AIDER_MODEL_SETTINGS_FILE` is exported; run `/tokens` |
 | "Failed to apply edit" loops | Model too weak for diff format — switch to `edit_format: whole` |
-| Ollama OOM / killed | Lower `num_ctx` to 16384; check `nvtop` |
+| Ollama OOM / killed | Lower `max_tokens` to 4096; check `nvtop` |
 | code-server won't start | Check `/workspace/code-server.log`; port 8080 in use |
 | Extensions gone after restart | Run `cs-save` after installing extensions from the UI |
 | Aider not found | Run `post_restart.sh` to rebuild venv |
