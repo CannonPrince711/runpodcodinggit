@@ -117,6 +117,7 @@ alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
 alias dl='cd /workspace/downloads'
 alias cslog='tail -f /workspace/code-server.log'
+alias cs-save='tar -cf /workspace/code-server/extensions.tar -C /opt/cs/ext . && echo saved code-server extensions'
 alias ollog='tail -f /workspace/ollama.log'
 EOF
 
@@ -159,8 +160,8 @@ mkdir -p /workspace/code-server/{data,extensions}
 PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
   --bind-addr 0.0.0.0:8080 \
   --auth password \
-  --user-data-dir /workspace/code-server/data \
-  --extensions-dir /workspace/code-server/extensions \
+  --user-data-dir /opt/cs/data \
+  --extensions-dir /opt/cs/ext \
   /workspace/mods > /workspace/code-server.log 2>&1 &
 ```
 
@@ -195,7 +196,7 @@ mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config
 ### Install extensions (persisted via `--extensions-dir`)
 
 ```bash
-EXT_DIR=/workspace/code-server/extensions
+EXT_DIR=/opt/cs/ext   # local disk for speed; saved to /workspace with: cs-save
 
 # code-server installs from Open VSX, not Microsoft's marketplace.
 # C# Dev Kit and the MS C/C++ extension are not on Open VSX (license-restricted), so use the open equivalents:
@@ -203,9 +204,7 @@ code-server --extensions-dir $EXT_DIR --install-extension muhammad-sammy.csharp
 code-server --extensions-dir $EXT_DIR --install-extension llvm-vs-code-extensions.vscode-clangd
 code-server --extensions-dir $EXT_DIR --install-extension sumneko.lua
 code-server --extensions-dir $EXT_DIR --install-extension ms-python.python
-code-server --extensions-dir $EXT_DIR --install-extension eamodio.gitlens
 code-server --extensions-dir $EXT_DIR --install-extension ms-vscode.hexeditor
-code-server --extensions-dir $EXT_DIR --install-extension esbenp.prettier-vscode
 code-server --extensions-dir $EXT_DIR --install-extension Continue.continue   # Qwen chat + autocomplete in the editor
 ```
 
@@ -566,6 +565,7 @@ alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
 alias dl='cd /workspace/downloads'
 alias cslog='tail -f /workspace/code-server.log'
+alias cs-save='tar -cf /workspace/code-server/extensions.tar -C /opt/cs/ext . && echo saved code-server extensions'
 alias ollog='tail -f /workspace/ollama.log'
 VARS
 # Also export for the processes this script starts (.bashrc returns early in non-interactive shells)
@@ -667,14 +667,29 @@ fi
 
 # Continue (Qwen chat + autocomplete inside code-server) reads ~/.continue, which a restart wipes
 mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config.yaml 2>/dev/null || true
-mkdir -p /workspace/code-server/{data,extensions}
+mkdir -p /workspace/code-server/data/User
+# Speed: code-server's editor state and extensions run from the container disk (/opt/cs),
+# not the slow network volume. Your settings/keybindings/tasks stay on /workspace (symlinked),
+# and extensions are kept on /workspace as extensions.tar (save new ones with: cs-save).
+CS=/opt/cs
+mkdir -p $CS/data/User $CS/ext
+for f in settings.json keybindings.json tasks.json; do
+  [ -f /workspace/code-server/data/User/$f ] && ln -sfn /workspace/code-server/data/User/$f $CS/data/User/$f || true
+done
+if [ -z "$(ls -A $CS/ext)" ]; then
+  if [ -f /workspace/code-server/extensions.tar ]; then
+    tar -xf /workspace/code-server/extensions.tar -C $CS/ext
+  elif [ -n "$(ls -A /workspace/code-server/extensions 2>/dev/null)" ]; then
+    cp -r /workspace/code-server/extensions/. $CS/ext/ && tar -cf /workspace/code-server/extensions.tar -C $CS/ext .
+  fi
+fi
 # Keep the password in a file on the volume instead of hardcoding it here
 [ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
 pgrep -f "code-server.*--bind-addr" >/dev/null || \
   PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
      --bind-addr 0.0.0.0:8080 --auth password \
-     --user-data-dir /workspace/code-server/data \
-     --extensions-dir /workspace/code-server/extensions \
+     --user-data-dir $CS/data \
+     --extensions-dir $CS/ext \
      /workspace/mods > /workspace/code-server.log 2>&1 &
 
 # --- 7. Directories ---
@@ -771,7 +786,7 @@ EOF
 | "Failed to apply edit" loops | Model too weak for diff format — switch to `edit_format: whole` |
 | Ollama OOM / killed | Lower `num_ctx` to 16384; check `nvtop` |
 | code-server won't start | Check `/workspace/code-server.log`; port 8080 in use |
-| Extensions gone after restart | Confirm `--extensions-dir` points to `/workspace` |
+| Extensions gone after restart | Run `cs-save` after installing extensions from the UI |
 | Aider not found | Run `post_restart.sh` to rebuild venv |
 | Tmux session lost | Pod restart killed it; Aider state saved in git. `git log` to recover |
 | Slow first response | `export OLLAMA_KEEP_ALIVE=30m` prevents model eviction |

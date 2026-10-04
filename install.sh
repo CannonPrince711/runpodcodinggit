@@ -42,6 +42,7 @@ alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
 alias dl='cd /workspace/downloads'
 alias cslog='tail -f /workspace/code-server.log'
+alias cs-save='tar -cf /workspace/code-server/extensions.tar -C /opt/cs/ext . && echo saved code-server extensions'
 alias ollog='tail -f /workspace/ollama.log'
 VARS
 # Also export for the processes this script starts (.bashrc returns early in non-interactive shells)
@@ -143,14 +144,29 @@ fi
 
 # Continue (Qwen chat + autocomplete inside code-server) reads ~/.continue, which a restart wipes
 mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config.yaml 2>/dev/null || true
-mkdir -p /workspace/code-server/{data,extensions}
+mkdir -p /workspace/code-server/data/User
+# Speed: code-server's editor state and extensions run from the container disk (/opt/cs),
+# not the slow network volume. Your settings/keybindings/tasks stay on /workspace (symlinked),
+# and extensions are kept on /workspace as extensions.tar (save new ones with: cs-save).
+CS=/opt/cs
+mkdir -p $CS/data/User $CS/ext
+for f in settings.json keybindings.json tasks.json; do
+  [ -f /workspace/code-server/data/User/$f ] && ln -sfn /workspace/code-server/data/User/$f $CS/data/User/$f || true
+done
+if [ -z "$(ls -A $CS/ext)" ]; then
+  if [ -f /workspace/code-server/extensions.tar ]; then
+    tar -xf /workspace/code-server/extensions.tar -C $CS/ext
+  elif [ -n "$(ls -A /workspace/code-server/extensions 2>/dev/null)" ]; then
+    cp -r /workspace/code-server/extensions/. $CS/ext/ && tar -cf /workspace/code-server/extensions.tar -C $CS/ext .
+  fi
+fi
 # Keep the password in a file on the volume instead of hardcoding it here
 [ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
 pgrep -f "code-server.*--bind-addr" >/dev/null || \
   PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
      --bind-addr 0.0.0.0:8080 --auth password \
-     --user-data-dir /workspace/code-server/data \
-     --extensions-dir /workspace/code-server/extensions \
+     --user-data-dir $CS/data \
+     --extensions-dir $CS/ext \
      /workspace/mods > /workspace/code-server.log 2>&1 &
 
 # --- 7. Directories ---
@@ -296,7 +312,7 @@ Frameworks: BepInEx, MelonLoader, HarmonyX, MonoMod, UE4SS, Doorstop.
 - State target framework if it matters (netstandard2.1 / net472 / net6.0).
 __RPEOF5__
 
-[ -f /workspace/code-server/data/User/settings.json ] || cat > /workspace/code-server/data/User/settings.json << '__RPEOF_S__'
+[ -s /workspace/code-server/data/User/settings.json ] || cat > /workspace/code-server/data/User/settings.json << '__RPEOF_S__'
 {
   "editor.minimap.enabled": true,
   "files.autoSave": "afterDelay",
@@ -317,7 +333,7 @@ __RPEOF5__
 __RPEOF_S__
 
 # Aider inside code-server: a task + Ctrl+Alt+A shortcut (only written if you don't have your own)
-[ -f /workspace/code-server/data/User/tasks.json ] || cat > /workspace/code-server/data/User/tasks.json << '__RPEOF_T__'
+[ -s /workspace/code-server/data/User/tasks.json ] || cat > /workspace/code-server/data/User/tasks.json << '__RPEOF_T__'
 {
   "version": "2.0.0",
   "tasks": [
@@ -336,7 +352,7 @@ __RPEOF_S__
   ]
 }
 __RPEOF_T__
-[ -f /workspace/code-server/data/User/keybindings.json ] || cat > /workspace/code-server/data/User/keybindings.json << '__RPEOF_K__'
+[ -s /workspace/code-server/data/User/keybindings.json ] || cat > /workspace/code-server/data/User/keybindings.json << '__RPEOF_K__'
 [
   {
     "key": "ctrl+alt+a",
@@ -386,11 +402,13 @@ else
 fi
 
 echo "==> Installing code-server extensions"
+# Lean set: GitLens and Prettier were dropped because they slow down page load
 for ext in muhammad-sammy.csharp llvm-vs-code-extensions.vscode-clangd sumneko.lua ms-python.python \
-           eamodio.gitlens ms-vscode.hexeditor esbenp.prettier-vscode Continue.continue; do
-  code-server --extensions-dir /workspace/code-server/extensions --install-extension "$ext" >/dev/null 2>&1 \
+           ms-vscode.hexeditor Continue.continue; do
+  code-server --extensions-dir /opt/cs/ext --install-extension "$ext" >/dev/null 2>&1 \
     && echo "    $ext" || echo "    WARN: could not install $ext"
 done
+tar -cf /workspace/code-server/extensions.tar -C /opt/cs/ext . && echo "    saved extensions to /workspace/code-server/extensions.tar"
 
 echo
 echo "==> Done."
