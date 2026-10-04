@@ -44,7 +44,7 @@ export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
 alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
 alias mod='bash /workspace/scripts/mod.sh'
-qmod() { cd "/workspace/mods/$1" && qwen; }   # Qwen Code in a game folder
+qmod() { local d="$1"; [ -d "$d" ] || d="/workspace/mods/$1"; [ -d "$d" ] || d=$(find /workspace/mods -maxdepth 6 -type d -iname "$1" -not -path "*/.git/*" | head -1); [ -n "$d" ] && cd "$d" && qwen; }   # Qwen Code in a mod folder (any depth)
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
@@ -248,37 +248,67 @@ git commit -qm "init: $1 mod workspace"
 echo "Created $DIR"
 __RPEOF1__
 
+cat > /workspace/scripts/find-project.sh << '__RPEOF_FP__'
+#!/bin/bash
+# Print the project folder that contains $1 (any depth under /workspace/mods).
+# Prefers the nearest folder with .git or CONVENTIONS.md, then one with a build file.
+start=$(cd "${1:-$PWD}" 2>/dev/null && pwd) || exit 1
+for pass in repo build; do
+  d=$start
+  while [ "$d" != "/" ] && [ "$d" != "/workspace/mods" ] && [ "$d" != "/workspace" ]; do
+    if [ $pass = repo ]; then
+      { [ -e "$d/.git" ] || [ -f "$d/CONVENTIONS.md" ]; } && { echo "$d"; exit 0; }
+    else
+      ls "$d" 2>/dev/null | grep -qiE '^(build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradlew|pom\.xml|.*\.sln|.*\.csproj|cmakelists\.txt|package\.json)$' \
+        && { echo "$d"; exit 0; }
+    fi
+    d=$(dirname "$d")
+  done
+done
+exit 1
+__RPEOF_FP__
+
 cat > /workspace/scripts/aider-here.sh << '__RPEOF_AH__'
 #!/bin/bash
-# Open Aider for the game folder this terminal is in; otherwise ask which game.
-case "$PWD" in
-  /workspace/mods/*/*|/workspace/mods/*) GAME=$(echo "${PWD#/workspace/mods/}" | cut -d/ -f1) ;;
-esac
-if [ -z "$GAME" ] || [ "$GAME" = "shared-libraries" ]; then
-  echo "Games:"; ls -1 /workspace/mods | grep -v shared-libraries | sed 's/^/  /'
-  read -r -p "Open Aider for which game? " GAME
+# Open Aider for the project this terminal (or file) is in; otherwise ask which one.
+DIR=$(bash /workspace/scripts/find-project.sh "$PWD")
+if [ -z "$DIR" ]; then
+  echo "Projects in /workspace/mods:"
+  find /workspace/mods -maxdepth 5 \( -name .git -o -name CONVENTIONS.md -o -name build.gradle -o -name '*.sln' \) \
+    -not -path '*/Decompiled/*' -printf '%h\n' 2>/dev/null | sort -u | sed 's#^/workspace/mods/#  #'
+  read -r -p "Open Aider for which one (name or path)? " DIR
 fi
-[ -n "$GAME" ] && exec bash /workspace/scripts/mod.sh "$GAME"
+[ -n "$DIR" ] && exec bash /workspace/scripts/mod.sh "$DIR"
 __RPEOF_AH__
 
 cat > /workspace/scripts/mod.sh << '__RPEOF2__'
 #!/bin/bash
-# Usage: mod <GameName>  [-- attach to tmux session ]
-GAME="$1"
-[ -z "$GAME" ] && { echo "usage: mod <GameName>"; exit 1; }
-DIR="/workspace/mods/$GAME"
-[ ! -d "$DIR" ] && { echo "no such mod: $GAME (run: newmod.sh $GAME)"; exit 1; }
+# Usage: mod <GameName | folder name | path>   (reattaches if already running)
+ARG="$1"
+[ -z "$ARG" ] && { echo "usage: mod <GameName | folder | path>"; exit 1; }
+if [ -d "$ARG" ]; then
+  DIR=$(cd "$ARG" && pwd)
+elif [ -d "/workspace/mods/$ARG" ]; then
+  DIR="/workspace/mods/$ARG"
+else
+  # Find a folder with that name anywhere under /workspace/mods (e.g. shared-libraries/minecraft/Villageoverhaul)
+  DIR=$(find /workspace/mods -maxdepth 6 -type d -iname "$ARG" -not -path '*/.git/*' -not -path '*/Decompiled/*' 2>/dev/null | head -1)
+fi
+{ [ -z "$DIR" ] || [ ! -d "$DIR" ]; } && { echo "no such mod: $ARG (run: newmod.sh $ARG)"; exit 1; }
 
-SESSION="mod-$GAME"
+NAME=$(basename "$DIR")
+SESSION="mod-${NAME//[^A-Za-z0-9_-]/_}"
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   exec tmux attach -t "$SESSION"
 fi
 
+READ=""
+[ -f "$DIR/CONVENTIONS.md" ] && READ="--read ./CONVENTIONS.md"
 tmux new-session -s "$SESSION" -c "$DIR" \
   "/opt/aider-env/bin/aider \
    --config /workspace/ai/aider/.aider.conf.yml \
-   --read ./CONVENTIONS.md \
+   $READ \
    --watch-files"
 __RPEOF2__
 
@@ -380,13 +410,16 @@ __RPEOF_S__
     {
       "label": "Aider: open for this mod",
       "type": "shell",
-      "command": "top=$(git -C \"${fileDirname}\" rev-parse --show-toplevel 2>/dev/null); case \"$top\" in /workspace/mods/*) bash /workspace/scripts/mod.sh \"$(basename \"$top\")\";; *) echo 'Open a file inside /workspace/mods/<Game> first'; read -r -p 'Or type a game name: ' g && bash /workspace/scripts/mod.sh \"$g\";; esac",
+      "command": "bash /workspace/scripts/aider-here.sh",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
         "focus": true,
         "clear": true
+      },
+      "options": {
+        "cwd": "${fileDirname}"
       }
     }
   ]
@@ -404,6 +437,18 @@ __RPEOF_K__
 
 # Speed: stop code-server watching/indexing models, caches and decompiled code on the network volume.
 # Merged into settings.json even if you already have one (skipped if it contains comments).
+# Update the Aider task in an existing tasks.json
+python3 - << '__RPEOF_TM__' || true
+import json
+p = "/workspace/code-server/data/User/tasks.json"
+want = json.loads(r'''{"label": "Aider: open for this mod", "type": "shell", "command": "bash /workspace/scripts/aider-here.sh", "problemMatcher": [], "presentation": {"reveal": "always", "panel": "dedicated", "focus": true, "clear": true}, "options": {"cwd": "${fileDirname}"}}''')
+try:
+    t = json.load(open(p))
+except Exception:
+    raise SystemExit(0)
+t["tasks"] = [x for x in t.get("tasks", []) if x.get("label") != want["label"]] + [want]
+json.dump(t, open(p, "w"), indent=2)
+__RPEOF_TM__
 # Browser-safe Continue shortcuts (browsers grab Ctrl+L / Ctrl+I). Merged into keybindings.json.
 python3 - << '__RPEOF_KB__' || echo "    NOTE: keybindings.json has comments; add Alt+L / Alt+I for Continue by hand"
 import json

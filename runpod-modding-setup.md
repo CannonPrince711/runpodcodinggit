@@ -117,7 +117,7 @@ alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.y
 
 # Shortcuts
 alias mod='bash /workspace/scripts/mod.sh'
-qmod() { cd "/workspace/mods/$1" && qwen; }   # Qwen Code in a game folder
+qmod() { local d="$1"; [ -d "$d" ] || d="/workspace/mods/$1"; [ -d "$d" ] || d=$(find /workspace/mods -maxdepth 6 -type d -iname "$1" -not -path "*/.git/*" | head -1); [ -n "$d" ] && cd "$d" && qwen; }   # Qwen Code in a mod folder (any depth)
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
@@ -460,22 +460,32 @@ EOF
 ```bash
 cat > /workspace/scripts/mod.sh << 'EOF'
 #!/bin/bash
-# Usage: mod <GameName>  [-- attach to tmux session ]
-GAME="$1"
-[ -z "$GAME" ] && { echo "usage: mod <GameName>"; exit 1; }
-DIR="/workspace/mods/$GAME"
-[ ! -d "$DIR" ] && { echo "no such mod: $GAME (run: newmod.sh $GAME)"; exit 1; }
+# Usage: mod <GameName | folder name | path>   (reattaches if already running)
+ARG="$1"
+[ -z "$ARG" ] && { echo "usage: mod <GameName | folder | path>"; exit 1; }
+if [ -d "$ARG" ]; then
+  DIR=$(cd "$ARG" && pwd)
+elif [ -d "/workspace/mods/$ARG" ]; then
+  DIR="/workspace/mods/$ARG"
+else
+  # Find a folder with that name anywhere under /workspace/mods (e.g. shared-libraries/minecraft/Villageoverhaul)
+  DIR=$(find /workspace/mods -maxdepth 6 -type d -iname "$ARG" -not -path '*/.git/*' -not -path '*/Decompiled/*' 2>/dev/null | head -1)
+fi
+{ [ -z "$DIR" ] || [ ! -d "$DIR" ]; } && { echo "no such mod: $ARG (run: newmod.sh $ARG)"; exit 1; }
 
-SESSION="mod-$GAME"
+NAME=$(basename "$DIR")
+SESSION="mod-${NAME//[^A-Za-z0-9_-]/_}"
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   exec tmux attach -t "$SESSION"
 fi
 
+READ=""
+[ -f "$DIR/CONVENTIONS.md" ] && READ="--read ./CONVENTIONS.md"
 tmux new-session -s "$SESSION" -c "$DIR" \
   "/opt/aider-env/bin/aider \
    --config /workspace/ai/aider/.aider.conf.yml \
-   --read ./CONVENTIONS.md \
+   $READ \
    --watch-files"
 EOF
 ```
@@ -485,6 +495,7 @@ Usage:
 ```bash
 newmod.sh Game_A      # scaffold once
 mod Game_A            # opens Aider in a detached-safe tmux session
+mod Villageoverhaul   # folder name anywhere under /workspace/mods works too (any depth)
 ```
 
 **Why tmux:** if your network drops or code-server restarts, `mod Game_A` reattaches you to the exact Aider session. Nothing is lost.
@@ -573,7 +584,7 @@ export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
 alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
 alias mod='bash /workspace/scripts/mod.sh'
-qmod() { cd "/workspace/mods/$1" && qwen; }   # Qwen Code in a game folder
+qmod() { local d="$1"; [ -d "$d" ] || d="/workspace/mods/$1"; [ -d "$d" ] || d=$(find /workspace/mods -maxdepth 6 -type d -iname "$1" -not -path "*/.git/*" | head -1); [ -n "$d" ] && cd "$d" && qwen; }   # Qwen Code in a mod folder (any depth)
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
