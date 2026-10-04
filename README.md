@@ -14,7 +14,6 @@ Optional settings, set before running:
 
 ```bash
 export GIT_NAME="Your Name" GIT_EMAIL="you@example.com"   # git identity for Aider commits
-export PULL_32B=1                                         # also pull the 32B model
 ```
 
 If the repo is private, paste the line from `install-oneliner.txt` instead.

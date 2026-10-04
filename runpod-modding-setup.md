@@ -48,7 +48,6 @@ If it matters and isn't on `/workspace`, it doesn't exist tomorrow.
 | Item | Size | Why |
 |---|---|---|
 | Qwen 14B weights | ~9 GB | Ollama blobs |
-| Qwen 32B weights (optional) | ~20 GB | Future headroom |
 | Node / build caches | 5–8 GB | npm, nuget |
 | Aider repo maps | ~1 GB | `.aider.tags.cache` |
 | code-server extensions & user data | 1–2 GB | C# Dev Kit, C++ tools, GitLens |
@@ -168,11 +167,10 @@ Access: **RunPod Connect → HTTP Services → port 8080**
 ### Qwen inside the editor (Continue)
 
 Aider is the terminal agent; Continue puts the same local Qwen models in code-server's sidebar
-(chat `Ctrl+L`, inline edit `Ctrl+I`, tab autocomplete). Its config lives on the volume and is copied
+(chat `Ctrl+L`, inline edit `Ctrl+I`, tab autocomplete via the 7B). Its config lives on the volume and is copied
 to `~/.continue` on every start:
 
 ```bash
-ollama pull qwen2.5-coder:1.5b-base   # small model for autocomplete
 mkdir -p /workspace/ai/continue
 cat > /workspace/ai/continue/config.yaml << 'EOF'
 name: Local Qwen
@@ -190,12 +188,7 @@ models:
     provider: ollama
     model: qwen2.5-coder:7b-instruct
     apiBase: http://127.0.0.1:11434
-    roles: [chat, edit]
-  - name: Qwen2.5-Coder 1.5B autocomplete
-    provider: ollama
-    model: qwen2.5-coder:1.5b-base
-    apiBase: http://127.0.0.1:11434
-    roles: [autocomplete]
+    roles: [chat, edit, autocomplete]
 rules:
   - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
 EOF
@@ -323,8 +316,6 @@ ollama pull qwen2.5-coder:14b-instruct
 # Fast fallback for quick questions
 ollama pull qwen2.5-coder:7b-instruct
 
-# Optional — heavy, ~20 GB, only if you need max reasoning
-# ollama pull qwen2.5-coder:32b-instruct
 
 ollama list
 ```
@@ -368,11 +359,6 @@ cat > /workspace/ai/aider/.aider.model.settings.yml << 'EOF'
   extra_params:
     num_ctx: 16384
 
-- name: ollama/qwen2.5-coder:32b-instruct
-  edit_format: diff
-  use_repo_map: true
-  extra_params:
-    num_ctx: 8192   # 32B q4 is ~20 GB; bigger ctx spills to CPU on a 24 GB card
 EOF
 ```
 
@@ -773,7 +759,7 @@ EOF
 | `/diff` | Pending changes since last message |
 | `/undo` | Revert last auto-commit |
 | `/tokens` | Context usage |
-| `/model ollama/qwen2.5-coder:32b-instruct` | Swap models |
+| `/model ollama/qwen2.5-coder:7b-instruct` | Swap to the fast model |
 | `/reset` | Clear session |
 
 **Editing pattern for modding:**
@@ -845,6 +831,6 @@ If you copy scripts out of this guide on Windows, make sure the editor saves the
 | Ollama port | 11434 exposed publicly, no auth | Not exposed; localhost only |
 | code-server password | Hardcoded `modding123` | Random, stored in `/workspace/code-server/password` |
 | Decompiled code | Committed to git | Gitignored (still usable via `/read-only`) |
-| 32B model context | 16k (overflows 24 GB) | 8k |
+| Models | 7B, 14B, optional 32B | Only 7B and 14B (7B also does editor autocomplete) |
 | NuGet cache | Lost on restart | `NUGET_PACKAGES` on `/workspace` |
 | Background services | Died with the terminal | Started with `nohup setsid` |

@@ -1,6 +1,6 @@
 #!/bin/bash
 # RunPod modding workstation installer: code-server + Ollama/Qwen + Aider. No JupyterLab.
-# Safe to re-run. Optional: GIT_NAME="Me" GIT_EMAIL="me@x.com" PULL_7B=0 PULL_32B=1 bash install.sh
+# Safe to re-run. Optional: GIT_NAME="Me" GIT_EMAIL="me@x.com" bash install.sh
 set -e
 [ -d /workspace ] || { echo "ERROR: /workspace not found. Attach a network volume first."; exit 1; }
 echo "==> Creating directories"
@@ -236,11 +236,6 @@ cat > /workspace/ai/aider/.aider.model.settings.yml << '__RPEOF3__'
   extra_params:
     num_ctx: 16384
 
-- name: ollama/qwen2.5-coder:32b-instruct
-  edit_format: diff
-  use_repo_map: true
-  extra_params:
-    num_ctx: 8192   # 32B q4 is ~20 GB; bigger ctx spills to CPU on a 24 GB card
 __RPEOF3__
 
 cat > /workspace/ai/aider/.aider.conf.yml << '__RPEOF4__'
@@ -275,12 +270,7 @@ models:
     provider: ollama
     model: qwen2.5-coder:7b-instruct
     apiBase: http://127.0.0.1:11434
-    roles: [chat, edit]
-  - name: Qwen2.5-Coder 1.5B autocomplete
-    provider: ollama
-    model: qwen2.5-coder:1.5b-base
-    apiBase: http://127.0.0.1:11434
-    roles: [autocomplete]
+    roles: [chat, edit, autocomplete]
 rules:
   - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
 __RPEOF_C__
@@ -391,9 +381,7 @@ curl -sf http://127.0.0.1:11434 >/dev/null || { echo "ERROR: Ollama did not star
 
 echo "==> Pulling Qwen models (first run downloads ~14 GB)"
 ollama pull qwen2.5-coder:14b-instruct
-[ "${PULL_7B:-1}" = "1" ] && ollama pull qwen2.5-coder:7b-instruct
-ollama pull qwen2.5-coder:1.5b-base   # code-server autocomplete (~1 GB)
-[ "${PULL_32B:-0}" = "1" ] && ollama pull qwen2.5-coder:32b-instruct
+ollama pull qwen2.5-coder:7b-instruct
 
 echo "==> Checking Ollama sees the GPU"
 ollama run qwen2.5-coder:14b-instruct "say ok" >/dev/null 2>&1 || true
