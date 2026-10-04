@@ -34,9 +34,10 @@ export PIP_CACHE_DIR=/workspace/dev-env/pip-cache
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
-export PATH=/workspace/scripts:$PATH
-alias aider='/workspace/dev-env/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
-alias mod='/workspace/scripts/mod.sh'
+alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
+alias mod='bash /workspace/scripts/mod.sh'
+alias newmod='bash /workspace/scripts/newmod.sh'
+alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
 alias dl='cd /workspace/downloads'
 alias cslog='tail -f /workspace/code-server.log'
@@ -75,19 +76,20 @@ command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
 pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
 
 # --- 5. Aider venv (rebuild only if missing or broken) ---
-if ! /workspace/dev-env/aider-env/bin/aider --version >/dev/null 2>&1; then
+if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
   echo "    rebuilding aider venv..."
-  rm -rf /workspace/dev-env/aider-env
-  python3 -m venv /workspace/dev-env/aider-env
-  /workspace/dev-env/aider-env/bin/pip install -q --upgrade pip
-  /workspace/dev-env/aider-env/bin/pip install -q aider-chat
+  rm -rf /opt/aider-env
+  # Lives on the container disk: the network volume refuses chmod, which pip needs. pip cache on /workspace keeps reinstalls fast.
+  python3 -m venv /opt/aider-env
+  /opt/aider-env/bin/pip install -q --upgrade pip
+  /opt/aider-env/bin/pip install -q aider-chat
 fi
 
 # --- 6. code-server ---
 command -v code-server >/dev/null || curl -fsSL https://code-server.dev/install.sh | sh
 mkdir -p /workspace/code-server/{data,extensions}
 # Keep the password in a file on the volume instead of hardcoding it here
-[ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password; chmod 600 /workspace/code-server/password; }
+[ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
 pgrep -f "code-server.*--bind-addr" >/dev/null || \
   PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
      --bind-addr 0.0.0.0:8080 --auth password \
@@ -162,7 +164,7 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
 fi
 
 tmux new-session -s "$SESSION" -c "$DIR" \
-  "/workspace/dev-env/aider-env/bin/aider \
+  "/opt/aider-env/bin/aider \
    --config /workspace/ai/aider/.aider.conf.yml \
    --read ./CONVENTIONS.md"
 __RPEOF2__
@@ -248,7 +250,7 @@ __RPEOF5__
 }
 __RPEOF_S__
 
-chmod +x /workspace/scripts/*.sh
+# No chmod: the network volume refuses it, so scripts are always run with bash
 
 echo "==> Installing packages and starting services (post_restart.sh)"
 bash /workspace/scripts/post_restart.sh

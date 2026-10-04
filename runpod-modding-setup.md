@@ -50,7 +50,7 @@ If it matters and isn't on `/workspace`, it doesn't exist tomorrow.
 | Qwen 14B weights | ~9 GB | Ollama blobs |
 | Qwen 32B weights (optional) | ~20 GB | Future headroom |
 | Python / node / build caches | 5–8 GB | pip cache, nuget, tree-sitter |
-| Aider venv + repo maps | ~3 GB | Persistent interpreter + `.aider.tags.cache` |
+| pip cache + repo maps | ~3 GB | Fast Aider reinstall + `.aider.tags.cache` |
 | code-server extensions & user data | 1–2 GB | C# Dev Kit, C++ tools, GitLens |
 | Game modding tools | 5–10 GB | BepInEx, MelonLoader, UE4SS, ILSpy |
 | Mod projects + decompiled assemblies | 15–25 GB | Grows fastest; multiple games |
@@ -105,15 +105,15 @@ export PIP_CACHE_DIR=/workspace/dev-env/pip-cache
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 
-# Put helper scripts on PATH so `newmod.sh` works anywhere
-export PATH=/workspace/scripts:$PATH
 
 # Aider
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
-alias aider='/workspace/dev-env/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
+alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
 
 # Shortcuts
-alias mod='/workspace/scripts/mod.sh'
+alias mod='bash /workspace/scripts/mod.sh'
+alias newmod='bash /workspace/scripts/newmod.sh'
+alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
 alias dl='cd /workspace/downloads'
 alias cslog='tail -f /workspace/code-server.log'
@@ -155,7 +155,7 @@ curl -fsSL https://code-server.dev/install.sh | sh
 mkdir -p /workspace/code-server/{data,extensions}
 
 # Random password stored on the volume (read it with: cat /workspace/code-server/password)
-[ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password; chmod 600 /workspace/code-server/password; }
+[ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
 PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
   --bind-addr 0.0.0.0:8080 \
   --auth password \
@@ -237,7 +237,7 @@ ollama list
 
 ---
 
-## 7. Install Aider (Persistent venv)
+## 7. Install Aider
 
 ```bash
 # Git identity (aider auto-commits — required)
@@ -246,12 +246,13 @@ git config --global user.email "you@example.com"
 git config --global init.defaultBranch main
 git config --global --add safe.directory '*'
 
-# Persistent virtual environment
-python3 -m venv /workspace/dev-env/aider-env
-/workspace/dev-env/aider-env/bin/pip install --upgrade pip
-/workspace/dev-env/aider-env/bin/pip install aider-chat
+# The venv lives on the container disk (/opt): the network volume refuses chmod, which pip needs.
+# post_restart.sh rebuilds it after each restart, using the pip cache on /workspace.
+python3 -m venv /opt/aider-env
+/opt/aider-env/bin/pip install --upgrade pip
+/opt/aider-env/bin/pip install aider-chat
 
-/workspace/dev-env/aider-env/bin/aider --version
+/opt/aider-env/bin/aider --version
 ```
 
 ### Model settings — critical context override
@@ -376,7 +377,6 @@ git add -A
 git commit -qm "init: $1 mod workspace"
 echo "Created $DIR"
 EOF
-chmod +x /workspace/scripts/newmod.sh
 ```
 
 ### `/workspace/scripts/mod.sh` — launch Aider inside tmux
@@ -397,11 +397,10 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
 fi
 
 tmux new-session -s "$SESSION" -c "$DIR" \
-  "/workspace/dev-env/aider-env/bin/aider \
+  "/opt/aider-env/bin/aider \
    --config /workspace/ai/aider/.aider.conf.yml \
    --read ./CONVENTIONS.md"
 EOF
-chmod +x /workspace/scripts/mod.sh
 ```
 
 Usage:
@@ -487,9 +486,10 @@ export PIP_CACHE_DIR=/workspace/dev-env/pip-cache
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
-export PATH=/workspace/scripts:$PATH
-alias aider='/workspace/dev-env/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
-alias mod='/workspace/scripts/mod.sh'
+alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
+alias mod='bash /workspace/scripts/mod.sh'
+alias newmod='bash /workspace/scripts/newmod.sh'
+alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
 alias dl='cd /workspace/downloads'
 alias cslog='tail -f /workspace/code-server.log'
@@ -528,19 +528,20 @@ command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
 pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
 
 # --- 5. Aider venv (rebuild only if missing or broken) ---
-if ! /workspace/dev-env/aider-env/bin/aider --version >/dev/null 2>&1; then
+if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
   echo "    rebuilding aider venv..."
-  rm -rf /workspace/dev-env/aider-env
-  python3 -m venv /workspace/dev-env/aider-env
-  /workspace/dev-env/aider-env/bin/pip install -q --upgrade pip
-  /workspace/dev-env/aider-env/bin/pip install -q aider-chat
+  rm -rf /opt/aider-env
+  # Lives on the container disk: the network volume refuses chmod, which pip needs. pip cache on /workspace keeps reinstalls fast.
+  python3 -m venv /opt/aider-env
+  /opt/aider-env/bin/pip install -q --upgrade pip
+  /opt/aider-env/bin/pip install -q aider-chat
 fi
 
 # --- 6. code-server ---
 command -v code-server >/dev/null || curl -fsSL https://code-server.dev/install.sh | sh
 mkdir -p /workspace/code-server/{data,extensions}
 # Keep the password in a file on the volume instead of hardcoding it here
-[ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password; chmod 600 /workspace/code-server/password; }
+[ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
 pgrep -f "code-server.*--bind-addr" >/dev/null || \
   PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
      --bind-addr 0.0.0.0:8080 --auth password \
@@ -558,7 +559,6 @@ echo "    code-server: :8080 (password in /workspace/code-server/password)"
 echo "    run: source ~/.bashrc   (to load aliases in this shell)"
 echo "==> Ready."
 EOF
-chmod +x /workspace/scripts/post_restart.sh
 ```
 
 ---
@@ -691,7 +691,8 @@ If you copy scripts out of this guide on Windows, make sure the editor saves the
 |---|---|---|
 | JupyterLab | Jupyter extension, `notebooks/` folder | Removed; `post_restart.sh` stops it if the template starts it |
 | `post_restart.sh` deps | No `apt-get update`, wrong package names (`rg`, `p7zip-full`), aborted under `set -e` | `apt-get update` then one install with correct package names |
-| Helper scripts | `newmod.sh` not on PATH | `/workspace/scripts` added to PATH |
+| Helper scripts | `newmod.sh` not runnable; `chmod` fails on the network volume | No `chmod` anywhere; `mod`, `newmod`, `newmod.sh` are aliases that run the scripts with `bash` |
+| Aider venv | On `/workspace` (pip needs chmod) | On `/opt`, rebuilt by `post_restart.sh` |
 | Extensions | C# Dev Kit, MS C/C++ (not on Open VSX) | `muhammad-sammy.csharp`, `clangd` |
 | Aider config | `AIDER_CONFIG_FILE` (not read by Aider) | `aider` alias passes `--config` |
 | Ollama port | 11434 exposed publicly, no auth | Not exposed; localhost only |
