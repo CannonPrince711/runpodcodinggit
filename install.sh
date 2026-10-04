@@ -23,7 +23,9 @@ set -e
 echo "==> Restoring RunPod environment"
 
 # --- 1. Env vars ---
-grep -q OLLAMA_MODELS ~/.bashrc 2>/dev/null || cat >> ~/.bashrc << 'VARS'
+# Rewritten every run so new settings reach existing pods; ~/.bashrc just sources it
+mkdir -p /workspace/dev-env
+cat > /workspace/dev-env/env.sh << 'VARS'
 export WORKSPACE=/workspace
 export OLLAMA_MODELS=/workspace/models/ollama
 export HF_HOME=/workspace/models/huggingface
@@ -32,11 +34,17 @@ export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
 export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
 export OLLAMA_NUM_PARALLEL=1
+export OLLAMA_CONTEXT_LENGTH=32768   # default ctx for clients that can't set it (Qwen Code)
+export PATH=/opt/qwen-code/bin:/opt/node/bin:$PATH
+export OPENAI_BASE_URL=http://127.0.0.1:11434/v1   # Qwen Code -> local Ollama
+export OPENAI_API_KEY=ollama
+export OPENAI_MODEL=qwen2.5-coder:14b-instruct
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
 alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
 alias mod='bash /workspace/scripts/mod.sh'
+qmod() { cd "/workspace/mods/$1" && qwen; }   # Qwen Code in a game folder
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
 alias ws='cd /workspace'
@@ -45,11 +53,17 @@ alias cslog='tail -f /workspace/code-server.log'
 alias cs-save='tar -cf /workspace/code-server/extensions.tar -C /opt/cs/ext . && echo saved code-server extensions'
 alias ollog='tail -f /workspace/ollama.log'
 VARS
+grep -q 'dev-env/env.sh' ~/.bashrc 2>/dev/null || echo '[ -f /workspace/dev-env/env.sh ] && . /workspace/dev-env/env.sh' >> ~/.bashrc
 # Also export for the processes this script starts (.bashrc returns early in non-interactive shells)
 export OLLAMA_MODELS=/workspace/models/ollama
 export OLLAMA_KEEP_ALIVE=30m
 export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
 export OLLAMA_NUM_PARALLEL=1
+export OLLAMA_CONTEXT_LENGTH=32768   # default ctx for clients that can't set it (Qwen Code)
+export PATH=/opt/qwen-code/bin:/opt/node/bin:$PATH
+export OPENAI_BASE_URL=http://127.0.0.1:11434/v1   # Qwen Code -> local Ollama
+export OPENAI_API_KEY=ollama
+export OPENAI_MODEL=qwen2.5-coder:14b-instruct
 export HF_HOME=/workspace/models/huggingface
 
 # --- 2. Git ---
@@ -119,7 +133,7 @@ if ! command -v ollama >/dev/null; then
     save ollama "$OLLAMA_BIN" "$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
   fi
 fi
-pgrep -x ollama >/dev/null || OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_NUM_PARALLEL=1 nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
+pgrep -x ollama >/dev/null || OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_NUM_PARALLEL=1 OLLAMA_CONTEXT_LENGTH=32768 nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
 
 # Aider (venv at /opt/aider-env)
 if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
@@ -139,6 +153,19 @@ if ! command -v code-server >/dev/null; then
   if ! command -v code-server >/dev/null; then
     curl -fsSL https://code-server.dev/install.sh | sh
     save code-server /usr/lib/code-server /usr/bin/code-server "$HOME/.local/lib/code-server" "$HOME/.local/bin/code-server"
+  fi
+fi
+
+# Qwen Code (terminal agent, like Aider) on Node 22, both under /opt, saved to /workspace like the rest
+if [ ! -x /opt/qwen-code/bin/qwen ]; then
+  restore qwen-code || true
+  if [ ! -x /opt/qwen-code/bin/qwen ]; then
+    echo "    installing qwen code..."
+    mkdir -p /opt/node
+    curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.gz | tar -xz -C /opt/node --strip-components=1
+    PATH=/opt/node/bin:$PATH npm install -g -q --no-fund --no-audit --cache /tmp/npm-cache \
+      --prefix /opt/qwen-code @qwen-code/qwen-code \
+      && save qwen-code /opt/node /opt/qwen-code || echo "    WARN: qwen code install failed"
   fi
 fi
 
@@ -433,6 +460,7 @@ echo "==> Done."
 echo "    code-server: RunPod Connect -> HTTP Services -> port 8080"
 echo "    password:    $(cat /workspace/code-server/password)"
 echo "    Aider in the editor: open a file in a mod, press Ctrl+Alt+A (or comment \"... AI!\" and save)"
+echo "    Qwen Code agent: qmod Game_A   (or: cd /workspace/mods/Game_A && qwen)"
 echo "    Qwen in the editor: click the Continue icon in the left sidebar (chat: Alt+L, edit selection: Alt+I)"
 echo "    next:        source ~/.bashrc && newmod.sh Game_A && mod Game_A"
 echo "    after every pod restart: bash /workspace/scripts/post_restart.sh"
