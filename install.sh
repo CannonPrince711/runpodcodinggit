@@ -147,7 +147,7 @@ pgrep -f "code-server.*--bind-addr" >/dev/null || \
      --bind-addr 0.0.0.0:8080 --auth password \
      --user-data-dir /workspace/code-server/data \
      --extensions-dir /workspace/code-server/extensions \
-     /workspace > /workspace/code-server.log 2>&1 &
+     /workspace/mods > /workspace/code-server.log 2>&1 &
 
 # --- 7. Directories ---
 mkdir -p /workspace/downloads /workspace/mods /workspace/docs
@@ -360,6 +360,24 @@ __RPEOF_T__
   }
 ]
 __RPEOF_K__
+
+# Speed: stop code-server watching/indexing models, caches and decompiled code on the network volume.
+# Merged into settings.json even if you already have one (skipped if it contains comments).
+python3 - << '__RPEOF_PY__' || echo "    NOTE: settings.json has comments; add the speed settings from the guide by hand"
+import json
+p = "/workspace/code-server/data/User/settings.json"
+s = json.load(open(p))
+heavy = {"/workspace/models/**": True, "/workspace/dev-env/**": True, "/workspace/code-server/**": True,
+         "/workspace/downloads/**": True, "**/Decompiled/**": True, "**/bin/**": True, "**/obj/**": True,
+         "**/.git/objects/**": True, "**/.aider.tags.cache.v*/**": True}
+s.setdefault("files.watcherExclude", {}).update(heavy)
+s.setdefault("search.exclude", {}).update({k: v for k, v in heavy.items() if "Decompiled" not in k})
+s["search.followSymlinks"] = False
+s["git.autoRepositoryDetection"] = "openEditors"
+s["extensions.autoUpdate"] = False
+s["gitlens.codeLens.enabled"] = False
+json.dump(s, open(p, "w"), indent=2)
+__RPEOF_PY__
 
 # No chmod: the network volume refuses it, so scripts are always run with bash
 

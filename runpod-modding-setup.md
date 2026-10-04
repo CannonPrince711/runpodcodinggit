@@ -160,7 +160,7 @@ PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
   --auth password \
   --user-data-dir /workspace/code-server/data \
   --extensions-dir /workspace/code-server/extensions \
-  /workspace > /workspace/code-server.log 2>&1 &
+  /workspace/mods > /workspace/code-server.log 2>&1 &
 ```
 
 Access: **RunPod Connect → HTTP Services → port 8080**
@@ -244,6 +244,23 @@ cat > /workspace/code-server/data/User/settings.json << 'EOF'
 EOF
 ```
 
+
+### Speed: keep code-server off the heavy folders
+
+`/workspace` is a network volume holding GBs of model files and caches. Watching or indexing it makes
+code-server crawl, so code-server opens `/workspace/mods` and `install.sh` merges these into settings.json:
+
+```json
+"files.watcherExclude": { "/workspace/models/**": true, "/workspace/dev-env/**": true, "/workspace/code-server/**": true,
+                          "/workspace/downloads/**": true, "**/Decompiled/**": true, "**/bin/**": true, "**/obj/**": true,
+                          "**/.git/objects/**": true, "**/.aider.tags.cache.v*/**": true },
+"search.followSymlinks": false,
+"git.autoRepositoryDetection": "openEditors",
+"extensions.autoUpdate": false,
+"gitlens.codeLens.enabled": false
+```
+
+Open one game at a time (File → Open Folder → `/workspace/mods/Game_A`) for the fastest editor.
 
 ### Aider inside code-server
 
@@ -677,7 +694,7 @@ pgrep -f "code-server.*--bind-addr" >/dev/null || \
      --bind-addr 0.0.0.0:8080 --auth password \
      --user-data-dir /workspace/code-server/data \
      --extensions-dir /workspace/code-server/extensions \
-     /workspace > /workspace/code-server.log 2>&1 &
+     /workspace/mods > /workspace/code-server.log 2>&1 &
 
 # --- 7. Directories ---
 mkdir -p /workspace/downloads /workspace/mods /workspace/docs
