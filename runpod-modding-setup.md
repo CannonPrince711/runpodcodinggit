@@ -5,6 +5,8 @@ code-server is the only IDE. JupyterLab is not used, not exposed, and stopped on
 
 > **Quick install:** run `curl -fsSL https://raw.githubusercontent.com/CannonPrince711/runpodcodinggit/main/install.sh | bash` in the pod's terminal (or paste the line from `install-oneliner.txt`). It writes `/workspace/install.sh` and runs it, doing sections 2–10 below in one go. Set your git name first if you like: `export GIT_NAME="Me" GIT_EMAIL="me@example.com"`.
 
+> **On Windows 11 instead (Shadow PC):** run `irm https://raw.githubusercontent.com/CannonPrince711/runpodcodinggit/main/install.ps1 | iex` in PowerShell. See [section 17](#17-windows-11-shadow-pc).
+
 ---
 
 ## 0. The One Rule
@@ -906,3 +908,78 @@ If you copy scripts out of this guide on Windows, make sure the editor saves the
 | Models | 7B, 14B, optional 32B | 14B for everything, one model loaded at a time (`OLLAMA_MAX_LOADED_MODELS=1`); no 7B |
 | NuGet cache | Lost on restart | `NUGET_PACKAGES` on `/workspace` |
 | Background services | Died with the terminal | Started with `nohup setsid` |
+
+---
+
+## 17. Windows 11 (Shadow PC)
+
+`install.ps1` sets up the same workstation natively on Windows 11, without RunPod. It was written for a Shadow PC Power plan (RTX A4500 20 GB, 28 GB RAM, 512 GB local SSD) and works on any Windows 11 PC with an NVIDIA GPU. The SSD is local, so none of the network-volume workarounds (tar caches, `ws-git`, `post_restart.sh`, no-chmod) exist here.
+
+### Install
+
+Open a normal PowerShell window (Start → type *PowerShell*, not "Run as administrator") and run:
+
+```powershell
+$env:GIT_NAME="Your Name"; $env:GIT_EMAIL="you@example.com"   # optional
+irm https://raw.githubusercontent.com/CannonPrince711/runpodcodinggit/main/install.ps1 | iex
+```
+
+Windows asks for permission a few times (Git, .NET, Node.js install for all users): click **Yes**. The first run downloads about 1.5 GB of programs and 9 GB for the model. Re-running is safe; finished steps are skipped. To put things on another drive, set `$env:MODS_DIR="D:\mods"; $env:MODTOOLS_DIR="D:\modtools"` before running.
+
+### What it installs (via winget)
+
+| Piece | Linux version | Windows version |
+|---|---|---|
+| Editor | code-server in the browser | VS Code desktop, opened with `code C:\mods` |
+| Qwen in the editor | Continue | Continue (`%USERPROFILE%\.continue\config.yaml`), Ctrl+L chat, Ctrl+I edit |
+| Model server | Ollama, started by `post_restart.sh` | Ollama tray app, starts with Windows |
+| Model | `qwen2.5-coder:14b-instruct`, 32k ctx, one model loaded | Same (user environment variables `OLLAMA_CONTEXT_LENGTH=32768`, `OLLAMA_MAX_LOADED_MODELS=1`) |
+| Aider | venv in `/opt/aider-env` | `uv tool install` with its own Python 3.12 (`aider.exe` in `%USERPROFILE%\.local\bin`) |
+| Aider model | `ollama_chat/qwen2.5-coder:14b-instruct`, `num_ctx: 32768` | Same, config in `C:\modtools\ai\aider` |
+| Qwen Code | Node 22 in `/opt` | Node.js LTS + `npm install -g @qwen-code/qwen-code` |
+| Tools | git, ripgrep, .NET 8 SDK (apt) | Git, ripgrep, .NET 8 SDK (winget) |
+| VS Code extensions | open-source C#/clangd from Open VSX | `ms-dotnettools.csharp`, `ms-vscode.cpptools`, Lua, Python, Hex Editor, Continue |
+
+### Layout
+
+```
+C:\mods\                      your mod projects (any folder depth)
+C:\modtools\ai\aider\         .aider.conf.yml, .aider.model.settings.yml
+C:\modtools\ai\rules\         MODDING_RULES.md (read by Aider and Continue)
+C:\modtools\ai\continue\      Continue config (copied to %USERPROFILE%\.continue)
+C:\modtools\scripts\          mod, newmod, find-project, aider-here, profile.ps1
+%USERPROFILE%\.ollama\models  Qwen weights
+```
+
+### Commands (in any new PowerShell window, including VS Code's terminal)
+
+| Command | Does |
+|---|---|
+| `newmod Game_A` | Creates `C:\mods\Game_A` with `src`, `Decompiled`, `docs`, `refs`, `.gitignore`, `CONVENTIONS.md` and a git repo |
+| `mod Game_A` | Aider in that mod with `--watch-files` and `CONVENTIONS.md` loaded. Takes a name at any depth (`mod Villageoverhaul`) or a path |
+| `qmod Game_A` | Qwen Code agent in that mod |
+| `aider` | Plain Aider with the Qwen config |
+| `mods` | `cd C:\mods` |
+| `ollog` | Follow the Ollama log |
+
+In VS Code, **Ctrl+Alt+A** (or Terminal **+** dropdown → **Aider**) opens Aider for the mod the open file belongs to; if it can't tell, it lists your projects and asks. Write a comment ending in `AI!` and save to make Aider act on it.
+
+Unlike the pod, there's no tmux: Aider runs in the terminal you started it in, and closing that terminal ends it. Your work is in git either way.
+
+The installer sets the current user's PowerShell script policy to `RemoteSigned` (Windows 11 Home blocks all scripts by default), which these commands need.
+
+### After a reboot
+
+Nothing to run. Ollama starts with Windows; open VS Code and go.
+
+### Windows troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `mod` / `newmod` not recognized | Open a new PowerShell window. If still missing: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then reopen |
+| `winget` not found | Update **App Installer** from the Microsoft Store |
+| Qwen slow, `ollama ps` says CPU | Check `nvidia-smi`; restart Ollama from the tray icon |
+| Qwen Code forgets long files | Ollama app **Settings → Context length** may override the env var; set it to 32k |
+| Aider or Qwen Code not found right after install | Open a new window (PATH changed) |
+| VS Code settings not updated | Your `settings.json` had comments the installer can't parse; add the settings from this section by hand |
+
