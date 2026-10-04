@@ -137,6 +137,8 @@ if ! command -v code-server >/dev/null; then
   fi
 fi
 
+# Continue (Qwen chat + autocomplete inside code-server) reads ~/.continue, which a restart wipes
+mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config.yaml 2>/dev/null || true
 mkdir -p /workspace/code-server/{data,extensions}
 # Keep the password in a file on the volume instead of hardcoding it here
 [ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
@@ -255,6 +257,34 @@ stream: true
 cache-prompts: true
 __RPEOF4__
 
+mkdir -p /workspace/ai/continue
+cat > /workspace/ai/continue/config.yaml << '__RPEOF_C__'
+name: Local Qwen
+version: 1.0.0
+schema: v1
+models:
+  - name: Qwen2.5-Coder 14B
+    provider: ollama
+    model: qwen2.5-coder:14b-instruct
+    apiBase: http://127.0.0.1:11434
+    roles: [chat, edit, apply]
+    defaultCompletionOptions:
+      contextLength: 32768
+  - name: Qwen2.5-Coder 7B (fast)
+    provider: ollama
+    model: qwen2.5-coder:7b-instruct
+    apiBase: http://127.0.0.1:11434
+    roles: [chat, edit]
+  - name: Qwen2.5-Coder 1.5B autocomplete
+    provider: ollama
+    model: qwen2.5-coder:1.5b-base
+    apiBase: http://127.0.0.1:11434
+    roles: [autocomplete]
+rules:
+  - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
+__RPEOF_C__
+mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config.yaml
+
 cat > /workspace/ai/rules/MODDING_RULES.md << '__RPEOF5__'
 # Game Modding Rules
 
@@ -313,6 +343,7 @@ curl -sf http://127.0.0.1:11434 >/dev/null || { echo "ERROR: Ollama did not star
 echo "==> Pulling Qwen models (first run downloads ~14 GB)"
 ollama pull qwen2.5-coder:14b-instruct
 [ "${PULL_7B:-1}" = "1" ] && ollama pull qwen2.5-coder:7b-instruct
+ollama pull qwen2.5-coder:1.5b-base   # code-server autocomplete (~1 GB)
 [ "${PULL_32B:-0}" = "1" ] && ollama pull qwen2.5-coder:32b-instruct
 
 echo "==> Checking Ollama sees the GPU"
@@ -325,7 +356,7 @@ fi
 
 echo "==> Installing code-server extensions"
 for ext in muhammad-sammy.csharp llvm-vs-code-extensions.vscode-clangd sumneko.lua ms-python.python \
-           eamodio.gitlens ms-vscode.hexeditor esbenp.prettier-vscode; do
+           eamodio.gitlens ms-vscode.hexeditor esbenp.prettier-vscode Continue.continue; do
   code-server --extensions-dir /workspace/code-server/extensions --install-extension "$ext" >/dev/null 2>&1 \
     && echo "    $ext" || echo "    WARN: could not install $ext"
 done
@@ -334,5 +365,6 @@ echo
 echo "==> Done."
 echo "    code-server: RunPod Connect -> HTTP Services -> port 8080"
 echo "    password:    $(cat /workspace/code-server/password)"
+echo "    Qwen in the editor: click the Continue icon in the left sidebar (chat: Ctrl+L, edit: Ctrl+I)"
 echo "    next:        source ~/.bashrc && newmod.sh Game_A && mod Game_A"
 echo "    after every pod restart: bash /workspace/scripts/post_restart.sh"

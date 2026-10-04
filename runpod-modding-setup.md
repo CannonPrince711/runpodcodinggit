@@ -165,6 +165,43 @@ PASSWORD="$(cat /workspace/code-server/password)" nohup setsid code-server \
 
 Access: **RunPod Connect → HTTP Services → port 8080**
 
+### Qwen inside the editor (Continue)
+
+Aider is the terminal agent; Continue puts the same local Qwen models in code-server's sidebar
+(chat `Ctrl+L`, inline edit `Ctrl+I`, tab autocomplete). Its config lives on the volume and is copied
+to `~/.continue` on every start:
+
+```bash
+ollama pull qwen2.5-coder:1.5b-base   # small model for autocomplete
+mkdir -p /workspace/ai/continue
+cat > /workspace/ai/continue/config.yaml << 'EOF'
+name: Local Qwen
+version: 1.0.0
+schema: v1
+models:
+  - name: Qwen2.5-Coder 14B
+    provider: ollama
+    model: qwen2.5-coder:14b-instruct
+    apiBase: http://127.0.0.1:11434
+    roles: [chat, edit, apply]
+    defaultCompletionOptions:
+      contextLength: 32768
+  - name: Qwen2.5-Coder 7B (fast)
+    provider: ollama
+    model: qwen2.5-coder:7b-instruct
+    apiBase: http://127.0.0.1:11434
+    roles: [chat, edit]
+  - name: Qwen2.5-Coder 1.5B autocomplete
+    provider: ollama
+    model: qwen2.5-coder:1.5b-base
+    apiBase: http://127.0.0.1:11434
+    roles: [autocomplete]
+rules:
+  - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
+EOF
+mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config.yaml
+```
+
 ### Install extensions (persisted via `--extensions-dir`)
 
 ```bash
@@ -179,6 +216,7 @@ code-server --extensions-dir $EXT_DIR --install-extension ms-python.python
 code-server --extensions-dir $EXT_DIR --install-extension eamodio.gitlens
 code-server --extensions-dir $EXT_DIR --install-extension ms-vscode.hexeditor
 code-server --extensions-dir $EXT_DIR --install-extension esbenp.prettier-vscode
+code-server --extensions-dir $EXT_DIR --install-extension Continue.continue   # Qwen chat + autocomplete in the editor
 ```
 
 ### code-server settings
@@ -588,6 +626,8 @@ if ! command -v code-server >/dev/null; then
   fi
 fi
 
+# Continue (Qwen chat + autocomplete inside code-server) reads ~/.continue, which a restart wipes
+mkdir -p ~/.continue && cp /workspace/ai/continue/config.yaml ~/.continue/config.yaml 2>/dev/null || true
 mkdir -p /workspace/code-server/{data,extensions}
 # Keep the password in a file on the volume instead of hardcoding it here
 [ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
