@@ -246,7 +246,7 @@ git config --global init.defaultBranch main
 git config --global --add safe.directory '*'
 
 # The venv lives on the container disk (/opt): the network volume refuses chmod, which pip needs.
-# post_restart.sh rebuilds it after each restart (about a minute).
+# post_restart.sh saves it to /workspace/dev-env/cache/aider.tar and restores it after each restart.
 python3 -m venv /opt/aider-env
 /opt/aider-env/bin/pip install --no-cache-dir --upgrade pip
 /opt/aider-env/bin/pip install --no-cache-dir aider-chat
@@ -521,23 +521,56 @@ fi
 pkill -f jupyter-lab 2>/dev/null || true
 pkill -f jupyter-notebook 2>/dev/null || true
 
-# --- 4. Ollama ---
-command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
+# --- 4-6. Ollama, Aider, code-server: installed once, kept on /workspace ---
+# The network volume refuses chmod, so programs can't run from it directly.
+# Instead each install is saved to /workspace/dev-env/cache as a .tar and
+# unpacked onto the container disk after a restart: no downloads, ~seconds.
+# To update one, delete its .tar and re-run this script.
+CACHE=/workspace/dev-env/cache
+mkdir -p "$CACHE"
+restore() { [ -f "$CACHE/$1.tar" ] && echo "    restoring $1 from /workspace" && tar -xf "$CACHE/$1.tar" -C /; }
+save() {   # save <name> <abs paths...>
+  local name=$1; shift; local rel=()
+  for p in "$@"; do [ -e "$p" ] && rel+=("${p#/}"); done
+  if [ ${#rel[@]} -gt 0 ] && tar -cf "$CACHE/$name.tar.tmp" -C / "${rel[@]}" && mv -f "$CACHE/$name.tar.tmp" "$CACHE/$name.tar"; then
+    echo "    saved $name to $CACHE/$name.tar"
+  else
+    echo "    WARN: could not save $name to /workspace"
+  fi
+}
+
+# Ollama
+if ! command -v ollama >/dev/null; then
+  restore ollama || true
+  if ! command -v ollama >/dev/null; then
+    curl -fsSL https://ollama.com/install.sh | sh
+    OLLAMA_BIN=$(command -v ollama)
+    save ollama "$OLLAMA_BIN" "$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
+  fi
+fi
 pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
 
-# --- 5. Aider venv (rebuild only if missing or broken) ---
+# Aider (venv at /opt/aider-env)
 if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
-  echo "    rebuilding aider venv..."
-  rm -rf /opt/aider-env
-  # Lives on the container disk: the network volume refuses chmod, which pip needs.
-  # --no-cache-dir: pip can't use a cache on the volume (ownership), and it's a one-off install anyway.
-  python3 -m venv /opt/aider-env
-  /opt/aider-env/bin/pip install -q --no-cache-dir --upgrade pip
-  /opt/aider-env/bin/pip install -q --no-cache-dir aider-chat
+  restore aider || true
+  if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
+    echo "    installing aider..."
+    python3 -m venv --clear /opt/aider-env
+    /opt/aider-env/bin/pip install -q --no-cache-dir --upgrade pip
+    /opt/aider-env/bin/pip install -q --no-cache-dir aider-chat
+    save aider /opt/aider-env
+  fi
 fi
 
-# --- 6. code-server ---
-command -v code-server >/dev/null || curl -fsSL https://code-server.dev/install.sh | sh
+# code-server (settings, extensions and password already live in /workspace/code-server)
+if ! command -v code-server >/dev/null; then
+  restore code-server || true
+  if ! command -v code-server >/dev/null; then
+    curl -fsSL https://code-server.dev/install.sh | sh
+    save code-server /usr/lib/code-server /usr/bin/code-server "$HOME/.local/lib/code-server" "$HOME/.local/bin/code-server"
+  fi
+fi
+
 mkdir -p /workspace/code-server/{data,extensions}
 # Keep the password in a file on the volume instead of hardcoding it here
 [ -f /workspace/code-server/password ] || { openssl rand -base64 18 > /workspace/code-server/password 2>/dev/null; }
@@ -691,7 +724,7 @@ If you copy scripts out of this guide on Windows, make sure the editor saves the
 | JupyterLab | Jupyter extension, `notebooks/` folder | Removed; `post_restart.sh` stops it if the template starts it |
 | `post_restart.sh` deps | No `apt-get update`, wrong package names (`rg`, `p7zip-full`), aborted under `set -e` | `apt-get update` then one install with correct package names |
 | Helper scripts | `newmod.sh` not runnable; `chmod` fails on the network volume | No `chmod` anywhere; `mod`, `newmod`, `newmod.sh` are aliases that run the scripts with `bash` |
-| Aider venv | On `/workspace` (pip needs chmod) | On `/opt`, rebuilt by `post_restart.sh` |
+| Aider, code-server, Ollama | Reinstalled from the internet on every restart | Installed once, saved as .tar files in `/workspace/dev-env/cache`, unpacked in seconds after a restart |
 | Extensions | C# Dev Kit, MS C/C++ (not on Open VSX) | `muhammad-sammy.csharp`, `clangd` |
 | Aider config | `AIDER_CONFIG_FILE` (not read by Aider) | `aider` alias passes `--config` |
 | Ollama port | 11434 exposed publicly, no auth | Not exposed; localhost only |
