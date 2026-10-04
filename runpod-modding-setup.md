@@ -186,11 +186,6 @@ models:
     roles: [chat, edit, apply, autocomplete]
     defaultCompletionOptions:
       contextLength: 32768
-  - name: Qwen2.5-Coder 7B (fast)
-    provider: ollama
-    model: qwen2.5-coder:7b-instruct
-    apiBase: http://127.0.0.1:11434
-    roles: [chat]   # only loads if you pick it in the Continue dropdown
 rules:
   - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
 EOF
@@ -315,8 +310,6 @@ curl http://localhost:11434    # -> "Ollama is running"
 # Primary — best balance for A5000
 ollama pull qwen2.5-coder:14b-instruct
 
-# Fast fallback for quick questions
-ollama pull qwen2.5-coder:7b-instruct
 
 
 ollama list
@@ -355,11 +348,6 @@ cat > /workspace/ai/aider/.aider.model.settings.yml << 'EOF'
   extra_params:
     num_ctx: 32768
 
-- name: ollama/qwen2.5-coder:7b-instruct
-  edit_format: whole
-  use_repo_map: true
-  extra_params:
-    num_ctx: 16384
 
 EOF
 ```
@@ -766,7 +754,6 @@ EOF
 | `/diff` | Pending changes since last message |
 | `/undo` | Revert last auto-commit |
 | `/tokens` | Context usage |
-| `/model ollama/qwen2.5-coder:7b-instruct` | Swap to the fast model |
 | `/reset` | Clear session |
 
 **Editing pattern for modding:**
@@ -838,6 +825,6 @@ If you copy scripts out of this guide on Windows, make sure the editor saves the
 | Ollama port | 11434 exposed publicly, no auth | Not exposed; localhost only |
 | code-server password | Hardcoded `modding123` | Random, stored in `/workspace/code-server/password` |
 | Decompiled code | Committed to git | Gitignored (still usable via `/read-only`) |
-| Models | 7B, 14B, optional 32B | 14B for everything, one model loaded at a time (`OLLAMA_MAX_LOADED_MODELS=1`); 7B kept as a manual fast option |
+| Models | 7B, 14B, optional 32B | 14B for everything, one model loaded at a time (`OLLAMA_MAX_LOADED_MODELS=1`); no 7B |
 | NuGet cache | Lost on restart | `NUGET_PACKAGES` on `/workspace` |
 | Background services | Died with the terminal | Started with `nohup setsid` |

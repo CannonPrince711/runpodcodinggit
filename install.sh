@@ -234,11 +234,6 @@ cat > /workspace/ai/aider/.aider.model.settings.yml << '__RPEOF3__'
   extra_params:
     num_ctx: 32768
 
-- name: ollama/qwen2.5-coder:7b-instruct
-  edit_format: whole
-  use_repo_map: true
-  extra_params:
-    num_ctx: 16384
 
 __RPEOF3__
 
@@ -271,11 +266,6 @@ models:
     roles: [chat, edit, apply, autocomplete]
     defaultCompletionOptions:
       contextLength: 32768
-  - name: Qwen2.5-Coder 7B (fast)
-    provider: ollama
-    model: qwen2.5-coder:7b-instruct
-    apiBase: http://127.0.0.1:11434
-    roles: [chat]   # only loads if you pick it in the Continue dropdown
 rules:
   - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
 __RPEOF_C__
@@ -384,9 +374,8 @@ echo "==> Waiting for Ollama"
 for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434 >/dev/null && break; sleep 2; done
 curl -sf http://127.0.0.1:11434 >/dev/null || { echo "ERROR: Ollama did not start; see /workspace/ollama.log"; exit 1; }
 
-echo "==> Pulling Qwen models (first run downloads ~14 GB)"
+echo "==> Pulling Qwen models (first run downloads ~9 GB)"
 ollama pull qwen2.5-coder:14b-instruct
-ollama pull qwen2.5-coder:7b-instruct
 
 echo "==> Checking Ollama sees the GPU"
 ollama run qwen2.5-coder:14b-instruct "say ok" >/dev/null 2>&1 || true
