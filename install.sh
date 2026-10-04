@@ -55,15 +55,32 @@ git config --global user.email "${GIT_EMAIL:-you@example.com}"
 git config --global init.defaultBranch main
 git config --global --add safe.directory '*'
 
-# --- 3. System deps (apt lists are wiped with the container disk, so update first) ---
+# --- 3. System packages + .NET: downloaded once, kept on /workspace ---
+# The .deb files are saved to /workspace/dev-env/cache/debs on first install.
+# After a restart they're installed straight from there: no apt update, no downloads.
+# To update them, delete that folder and re-run this script.
 export DEBIAN_FRONTEND=noninteractive
+DEBS=/workspace/dev-env/cache/debs
+PKGS="git curl wget unzip zip tar jq tree build-essential cmake pkg-config \
+  htop nvtop ncdu ripgrep fd-find nano vim micro tmux sqlite3 \
+  python3-venv python3-pip file ranger nnn mc p7zip-full zstd pciutils lshw \
+  dotnet-sdk-8.0"
 if ! command -v tmux >/dev/null || ! command -v dotnet >/dev/null || ! command -v lspci >/dev/null; then
-  apt-get update -qq
-  apt-get install -y -qq \
-    git curl wget unzip zip tar jq tree build-essential cmake pkg-config \
-    htop nvtop ncdu ripgrep fd-find nano vim micro tmux sqlite3 \
-    python3-venv python3-pip file ranger nnn mc p7zip-full zstd pciutils lshw \
-    dotnet-sdk-8.0
+  if ls "$DEBS"/*.deb >/dev/null 2>&1 && dpkg -i "$DEBS"/*.deb >/dev/null 2>&1 && command -v dotnet >/dev/null; then
+    echo "    restored system packages + .NET from /workspace"
+  else
+    echo "    downloading system packages + .NET..."
+    apt-get update -qq
+    apt-get -f install -y -qq >/dev/null 2>&1 || true   # repair a partial restore
+    mkdir -p /var/cache/rp-debs/partial
+    # shellcheck disable=SC2086
+    apt-get install -y -qq --download-only -o Dir::Cache::archives=/var/cache/rp-debs $PKGS
+    # shellcheck disable=SC2086
+    apt-get install -y -qq -o Dir::Cache::archives=/var/cache/rp-debs $PKGS
+    mkdir -p "$DEBS"
+    cp /var/cache/rp-debs/*.deb "$DEBS"/ 2>/dev/null && echo "    saved packages to $DEBS" \
+      || echo "    WARN: could not save packages to /workspace"
+  fi
 fi
 
 # --- 3b. No JupyterLab: stop it if the template started it ---
