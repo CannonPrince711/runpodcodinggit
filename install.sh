@@ -44,6 +44,7 @@ export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
 alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
 alias mod='bash /workspace/scripts/mod.sh'
+alias ws-git='bash /workspace/scripts/ws-git.sh'
 qmod() { local d="$1"; [ -d "$d" ] || d="/workspace/mods/$1"; [ -d "$d" ] || d=$(find /workspace/mods -maxdepth 6 -type d -iname "$1" -not -path "*/.git/*" | head -1); [ -n "$d" ] && cd "$d" && qwen; }   # Qwen Code in a mod folder (any depth)
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
@@ -242,11 +243,49 @@ cat > CONVENTIONS.md << CONV
 - Source: ./src
 CONV
 
-git init -q
+bash /workspace/scripts/ws-git.sh init "$DIR" >/dev/null   # plain git init fails on the volume (chmod)
 git add -A
 git commit -qm "init: $1 mod workspace"
 echo "Created $DIR"
 __RPEOF1__
+
+cat > /workspace/scripts/ws-git.sh << '__RPEOF_G__'
+#!/bin/bash
+# Git on /workspace: the volume blocks chmod, and git chmods .git/config whenever it writes it
+# (git init, git clone, git config, git remote add). Everything else (add, commit, branch, reset,
+# push, pull) works. These helpers do the config-writing parts on the container disk instead.
+#   ws-git init  [dir]          create a repo in dir (default: current folder)
+#   ws-git clone <url> <dir>    clone into dir
+#   ws-git config <args...>     like `git config`, for the repo you're in
+set -e
+seed() {  # seed <dest-dir> [clone-url]
+  local tmp; tmp=$(mktemp -d /tmp/wsgit.XXXXXX)
+  if [ -n "$2" ]; then git clone -q "$2" "$tmp/r"; else git init -q "$tmp/r"; fi
+  git -C "$tmp/r" config core.filemode false
+  mkdir -p "$1"
+  cp -r "$tmp/r/." "$1/"
+  rm -rf "$tmp"
+}
+case "$1" in
+  init)
+    d="${2:-$PWD}"
+    [ -e "$d/.git" ] && { echo "already a git repo: $d"; exit 0; }
+    seed "$d"; echo "git repo created in $d" ;;
+  clone)
+    [ -z "$2" ] || [ -z "$3" ] && { echo "usage: ws-git clone <url> <dir>"; exit 1; }
+    [ -n "$(ls -A "$3" 2>/dev/null)" ] && { echo "$3 is not empty"; exit 1; }
+    seed "$3" "$2"; echo "cloned into $3" ;;
+  config)
+    shift
+    top=$(git rev-parse --show-toplevel)
+    tmp=$(mktemp /tmp/wsgitcfg.XXXXXX)
+    cat "$top/.git/config" > "$tmp"
+    git config -f "$tmp" "$@"
+    cat "$tmp" > "$top/.git/config"    # cat, not cp/mv: no chmod needed
+    rm -f "$tmp" ;;
+  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac
+__RPEOF_G__
 
 cat > /workspace/scripts/find-project.sh << '__RPEOF_FP__'
 #!/bin/bash
@@ -302,6 +341,9 @@ SESSION="mod-${NAME//[^A-Za-z0-9_-]/_}"
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   exec tmux attach -t "$SESSION"
 fi
+
+# Aider needs a git repo; plain `git init` fails on the volume, so seed one
+[ -e "$DIR/.git" ] || bash /workspace/scripts/ws-git.sh init "$DIR"
 
 READ=""
 [ -f "$DIR/CONVENTIONS.md" ] && READ="--read ./CONVENTIONS.md"

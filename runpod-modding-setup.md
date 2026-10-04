@@ -117,6 +117,7 @@ alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.y
 
 # Shortcuts
 alias mod='bash /workspace/scripts/mod.sh'
+alias ws-git='bash /workspace/scripts/ws-git.sh'
 qmod() { local d="$1"; [ -d "$d" ] || d="/workspace/mods/$1"; [ -d "$d" ] || d=$(find /workspace/mods -maxdepth 6 -type d -iname "$1" -not -path "*/.git/*" | head -1); [ -n "$d" ] && cd "$d" && qwen; }   # Qwen Code in a mod folder (any depth)
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
@@ -411,6 +412,18 @@ EOF
 
 ## 8. Helper Scripts
 
+### Git on `/workspace` (`ws-git`)
+
+The network volume blocks chmod, and git chmods `.git/config` whenever it writes it, so `git init`, `git clone`,
+`git config` and `git remote add` fail there (`error: chmod on .../.git/config.lock failed`). Commits, branches,
+reset, push and pull all work. Use these instead (the installer adds them; `mod` and `newmod.sh` call them for you):
+
+```bash
+ws-git init [dir]           # instead of git init
+ws-git clone <url> <dir>    # instead of git clone
+ws-git config <args>        # instead of git config / git remote add (e.g. ws-git config remote.origin.url <url>)
+```
+
 ### `/workspace/scripts/newmod.sh` — create a game mod workspace
 
 ```bash
@@ -449,7 +462,7 @@ cat > CONVENTIONS.md << CONV
 - Source: ./src
 CONV
 
-git init -q
+bash /workspace/scripts/ws-git.sh init "$DIR" >/dev/null   # plain git init fails on the volume (chmod)
 git add -A
 git commit -qm "init: $1 mod workspace"
 echo "Created $DIR"
@@ -480,6 +493,9 @@ SESSION="mod-${NAME//[^A-Za-z0-9_-]/_}"
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   exec tmux attach -t "$SESSION"
 fi
+
+# Aider needs a git repo; plain `git init` fails on the volume, so seed one
+[ -e "$DIR/.git" ] || bash /workspace/scripts/ws-git.sh init "$DIR"
 
 READ=""
 [ -f "$DIR/CONVENTIONS.md" ] && READ="--read ./CONVENTIONS.md"
@@ -585,6 +601,7 @@ export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
 alias aider='/opt/aider-env/bin/aider --config /workspace/ai/aider/.aider.conf.yml'
 alias mod='bash /workspace/scripts/mod.sh'
+alias ws-git='bash /workspace/scripts/ws-git.sh'
 qmod() { local d="$1"; [ -d "$d" ] || d="/workspace/mods/$1"; [ -d "$d" ] || d=$(find /workspace/mods -maxdepth 6 -type d -iname "$1" -not -path "*/.git/*" | head -1); [ -n "$d" ] && cd "$d" && qwen; }   # Qwen Code in a mod folder (any depth)
 alias newmod='bash /workspace/scripts/newmod.sh'
 alias newmod.sh='bash /workspace/scripts/newmod.sh'
