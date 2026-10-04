@@ -244,6 +244,46 @@ cat > /workspace/code-server/data/User/settings.json << 'EOF'
 EOF
 ```
 
+
+### Aider inside code-server
+
+Press **Ctrl+Alt+A** with any file from a mod open (or `Ctrl+Shift+P` → *Run Task* → *Aider: open for this mod*).
+Aider opens in a terminal panel inside the editor, in that game's folder, in the same tmux session `mod` uses.
+
+Aider also runs with `--watch-files`: write a comment ending in `AI!` in any file and save it, and Aider
+makes that change (e.g. `// make this a Postfix and null-check the player AI!`). A comment ending in `AI?` asks a question instead.
+
+```bash
+cat > /workspace/code-server/data/User/tasks.json << 'EOF'
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Aider: open for this mod",
+      "type": "shell",
+      "command": "top=$(git -C \"${fileDirname}\" rev-parse --show-toplevel 2>/dev/null); case \"$top\" in /workspace/mods/*) bash /workspace/scripts/mod.sh \"$(basename \"$top\")\";; *) echo 'Open a file inside /workspace/mods/<Game> first'; read -r -p 'Or type a game name: ' g && bash /workspace/scripts/mod.sh \"$g\";; esac",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    }
+  ]
+}
+EOF
+cat > /workspace/code-server/data/User/keybindings.json << 'EOF'
+[
+  {
+    "key": "ctrl+alt+a",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Aider: open for this mod"
+  }
+]
+EOF
+```
+
 ---
 
 ## 6. Install Ollama & Qwen
@@ -436,7 +476,8 @@ fi
 tmux new-session -s "$SESSION" -c "$DIR" \
   "/opt/aider-env/bin/aider \
    --config /workspace/ai/aider/.aider.conf.yml \
-   --read ./CONVENTIONS.md"
+   --read ./CONVENTIONS.md \
+   --watch-files"
 EOF
 ```
 

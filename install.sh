@@ -218,7 +218,8 @@ fi
 tmux new-session -s "$SESSION" -c "$DIR" \
   "/opt/aider-env/bin/aider \
    --config /workspace/ai/aider/.aider.conf.yml \
-   --read ./CONVENTIONS.md"
+   --read ./CONVENTIONS.md \
+   --watch-files"
 __RPEOF2__
 
 cat > /workspace/ai/aider/.aider.model.settings.yml << '__RPEOF3__'
@@ -330,6 +331,36 @@ __RPEOF5__
 }
 __RPEOF_S__
 
+# Aider inside code-server: a task + Ctrl+Alt+A shortcut (only written if you don't have your own)
+[ -f /workspace/code-server/data/User/tasks.json ] || cat > /workspace/code-server/data/User/tasks.json << '__RPEOF_T__'
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Aider: open for this mod",
+      "type": "shell",
+      "command": "top=$(git -C \"${fileDirname}\" rev-parse --show-toplevel 2>/dev/null); case \"$top\" in /workspace/mods/*) bash /workspace/scripts/mod.sh \"$(basename \"$top\")\";; *) echo 'Open a file inside /workspace/mods/<Game> first'; read -r -p 'Or type a game name: ' g && bash /workspace/scripts/mod.sh \"$g\";; esac",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    }
+  ]
+}
+__RPEOF_T__
+[ -f /workspace/code-server/data/User/keybindings.json ] || cat > /workspace/code-server/data/User/keybindings.json << '__RPEOF_K__'
+[
+  {
+    "key": "ctrl+alt+a",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Aider: open for this mod"
+  }
+]
+__RPEOF_K__
+
 # No chmod: the network volume refuses it, so scripts are always run with bash
 
 echo "==> Installing packages and starting services (post_restart.sh)"
@@ -365,6 +396,7 @@ echo
 echo "==> Done."
 echo "    code-server: RunPod Connect -> HTTP Services -> port 8080"
 echo "    password:    $(cat /workspace/code-server/password)"
+echo "    Aider in the editor: open a file in a mod, press Ctrl+Alt+A (or comment \"... AI!\" and save)"
 echo "    Qwen in the editor: click the Continue icon in the left sidebar (chat: Ctrl+L, edit: Ctrl+I)"
 echo "    next:        source ~/.bashrc && newmod.sh Game_A && mod Game_A"
 echo "    after every pod restart: bash /workspace/scripts/post_restart.sh"
