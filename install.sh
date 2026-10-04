@@ -364,6 +364,24 @@ __RPEOF_K__
 
 # Speed: stop code-server watching/indexing models, caches and decompiled code on the network volume.
 # Merged into settings.json even if you already have one (skipped if it contains comments).
+# Browser-safe Continue shortcuts (browsers grab Ctrl+L / Ctrl+I). Merged into keybindings.json.
+python3 - << '__RPEOF_KB__' || echo "    NOTE: keybindings.json has comments; add Alt+L / Alt+I for Continue by hand"
+import json
+p = "/workspace/code-server/data/User/keybindings.json"
+try:
+    kb = json.load(open(p))
+except FileNotFoundError:
+    kb = []
+want = [
+    {"key": "alt+l", "command": "continue.focusContinueInput"},
+    {"key": "alt+i", "command": "continue.focusEdit", "when": "editorTextFocus"},
+    {"key": "alt+i", "command": "continue.quickEdit", "when": "editorTextFocus"},
+]
+have = {(k.get("key"), k.get("command")) for k in kb}
+kb += [w for w in want if (w["key"], w["command"]) not in have]
+json.dump(kb, open(p, "w"), indent=2)
+__RPEOF_KB__
+
 python3 - << '__RPEOF_PY__' || echo "    NOTE: settings.json has comments; add the speed settings from the guide by hand"
 import json
 p = "/workspace/code-server/data/User/settings.json"
@@ -415,6 +433,6 @@ echo "==> Done."
 echo "    code-server: RunPod Connect -> HTTP Services -> port 8080"
 echo "    password:    $(cat /workspace/code-server/password)"
 echo "    Aider in the editor: open a file in a mod, press Ctrl+Alt+A (or comment \"... AI!\" and save)"
-echo "    Qwen in the editor: click the Continue icon in the left sidebar (chat: Ctrl+L, edit: Ctrl+I)"
+echo "    Qwen in the editor: click the Continue icon in the left sidebar (chat: Alt+L, edit selection: Alt+I)"
 echo "    next:        source ~/.bashrc && newmod.sh Game_A && mod Game_A"
 echo "    after every pod restart: bash /workspace/scripts/post_restart.sh"

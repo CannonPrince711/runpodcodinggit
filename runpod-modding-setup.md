@@ -170,7 +170,7 @@ Access: **RunPod Connect → HTTP Services → port 8080**
 ### Qwen inside the editor (Continue)
 
 Aider is the terminal agent; Continue puts the same local Qwen models in code-server's sidebar
-(chat `Ctrl+L`, inline edit `Ctrl+I`, tab autocomplete), all on the same 14B Aider uses. Its config lives on the volume and is copied
+(chat `Alt+L`, inline edit `Alt+I`, tab autocomplete; in a browser tab `Ctrl+L`/`Ctrl+I` are taken by the browser, so the installer adds the Alt keys), all on the same 14B Aider uses. Its config lives on the volume and is copied
 to `~/.continue` on every start:
 
 ```bash
