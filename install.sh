@@ -355,19 +355,21 @@ tmux new-session -s "$SESSION" -c "$DIR" \
 __RPEOF2__
 
 cat > /workspace/ai/aider/.aider.model.settings.yml << '__RPEOF3__'
-- name: ollama/qwen2.5-coder:14b-instruct
+- name: gpt-4-turbo
   edit_format: diff
   use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
-    num_ctx: 32768
+    max_tokens: 8192
 
 
 __RPEOF3__
 
 cat > /workspace/ai/aider/.aider.conf.yml << '__RPEOF4__'
-model: ollama/qwen2.5-coder:14b-instruct
-weak-model: ollama/qwen2.5-coder:14b-instruct   # same model for commit messages, so nothing else loads
+model: gpt-4-turbo
+weak-model: gpt-4-turbo
+openai-api-base: http://127.0.0.1:11434/v1
+openai-api-key: ollama
 model-settings-file: /workspace/ai/aider/.aider.model.settings.yml
 
 read:
