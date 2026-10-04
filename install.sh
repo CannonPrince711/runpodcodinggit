@@ -30,6 +30,8 @@ export HF_HOME=/workspace/models/huggingface
 export HUGGINGFACE_HUB_CACHE=/workspace/models/huggingface/hub
 export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
+export OLLAMA_NUM_PARALLEL=1
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
@@ -45,6 +47,8 @@ VARS
 # Also export for the processes this script starts (.bashrc returns early in non-interactive shells)
 export OLLAMA_MODELS=/workspace/models/ollama
 export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
+export OLLAMA_NUM_PARALLEL=1
 export HF_HOME=/workspace/models/huggingface
 
 # --- 2. Git ---
@@ -114,7 +118,7 @@ if ! command -v ollama >/dev/null; then
     save ollama "$OLLAMA_BIN" "$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
   fi
 fi
-pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
+pgrep -x ollama >/dev/null || OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_NUM_PARALLEL=1 nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
 
 # Aider (venv at /opt/aider-env)
 if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
@@ -240,6 +244,7 @@ __RPEOF3__
 
 cat > /workspace/ai/aider/.aider.conf.yml << '__RPEOF4__'
 model: ollama/qwen2.5-coder:14b-instruct
+weak-model: ollama/qwen2.5-coder:14b-instruct   # same model for commit messages, so nothing else loads
 model-settings-file: /workspace/ai/aider/.aider.model.settings.yml
 
 read:
@@ -263,14 +268,14 @@ models:
     provider: ollama
     model: qwen2.5-coder:14b-instruct
     apiBase: http://127.0.0.1:11434
-    roles: [chat, edit, apply]
+    roles: [chat, edit, apply, autocomplete]
     defaultCompletionOptions:
       contextLength: 32768
   - name: Qwen2.5-Coder 7B (fast)
     provider: ollama
     model: qwen2.5-coder:7b-instruct
     apiBase: http://127.0.0.1:11434
-    roles: [chat, edit, autocomplete]
+    roles: [chat]   # only loads if you pick it in the Continue dropdown
 rules:
   - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
 __RPEOF_C__

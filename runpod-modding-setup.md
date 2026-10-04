@@ -98,6 +98,8 @@ export HF_HOME=/workspace/models/huggingface
 export HUGGINGFACE_HUB_CACHE=/workspace/models/huggingface/hub
 export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
+export OLLAMA_NUM_PARALLEL=1
 
 # Caches — persistent
 export npm_config_cache=/workspace/dev-env/npm-cache
@@ -167,7 +169,7 @@ Access: **RunPod Connect → HTTP Services → port 8080**
 ### Qwen inside the editor (Continue)
 
 Aider is the terminal agent; Continue puts the same local Qwen models in code-server's sidebar
-(chat `Ctrl+L`, inline edit `Ctrl+I`, tab autocomplete via the 7B). Its config lives on the volume and is copied
+(chat `Ctrl+L`, inline edit `Ctrl+I`, tab autocomplete), all on the same 14B Aider uses. Its config lives on the volume and is copied
 to `~/.continue` on every start:
 
 ```bash
@@ -181,14 +183,14 @@ models:
     provider: ollama
     model: qwen2.5-coder:14b-instruct
     apiBase: http://127.0.0.1:11434
-    roles: [chat, edit, apply]
+    roles: [chat, edit, apply, autocomplete]
     defaultCompletionOptions:
       contextLength: 32768
   - name: Qwen2.5-Coder 7B (fast)
     provider: ollama
     model: qwen2.5-coder:7b-instruct
     apiBase: http://127.0.0.1:11434
-    roles: [chat, edit, autocomplete]
+    roles: [chat]   # only loads if you pick it in the Continue dropdown
 rules:
   - Follow the modding rules in /workspace/ai/rules/MODDING_RULES.md
 EOF
@@ -367,6 +369,7 @@ EOF
 ```bash
 cat > /workspace/ai/aider/.aider.conf.yml << 'EOF'
 model: ollama/qwen2.5-coder:14b-instruct
+weak-model: ollama/qwen2.5-coder:14b-instruct   # same model for commit messages, so nothing else loads
 model-settings-file: /workspace/ai/aider/.aider.model.settings.yml
 
 read:
@@ -563,6 +566,8 @@ export HF_HOME=/workspace/models/huggingface
 export HUGGINGFACE_HUB_CACHE=/workspace/models/huggingface/hub
 export OLLAMA_API_BASE=http://127.0.0.1:11434
 export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
+export OLLAMA_NUM_PARALLEL=1
 export npm_config_cache=/workspace/dev-env/npm-cache
 export NUGET_PACKAGES=/workspace/dev-env/nuget
 export AIDER_MODEL_SETTINGS_FILE=/workspace/ai/aider/.aider.model.settings.yml
@@ -578,6 +583,8 @@ VARS
 # Also export for the processes this script starts (.bashrc returns early in non-interactive shells)
 export OLLAMA_MODELS=/workspace/models/ollama
 export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_MAX_LOADED_MODELS=1   # only one model in VRAM at a time
+export OLLAMA_NUM_PARALLEL=1
 export HF_HOME=/workspace/models/huggingface
 
 # --- 2. Git ---
@@ -647,7 +654,7 @@ if ! command -v ollama >/dev/null; then
     save ollama "$OLLAMA_BIN" "$(dirname "$(dirname "$OLLAMA_BIN")")/lib/ollama"
   fi
 fi
-pgrep -x ollama >/dev/null || nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
+pgrep -x ollama >/dev/null || OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_NUM_PARALLEL=1 nohup setsid ollama serve > /workspace/ollama.log 2>&1 &
 
 # Aider (venv at /opt/aider-env)
 if ! /opt/aider-env/bin/aider --version >/dev/null 2>&1; then
@@ -831,6 +838,6 @@ If you copy scripts out of this guide on Windows, make sure the editor saves the
 | Ollama port | 11434 exposed publicly, no auth | Not exposed; localhost only |
 | code-server password | Hardcoded `modding123` | Random, stored in `/workspace/code-server/password` |
 | Decompiled code | Committed to git | Gitignored (still usable via `/read-only`) |
-| Models | 7B, 14B, optional 32B | Only 7B and 14B (7B also does editor autocomplete) |
+| Models | 7B, 14B, optional 32B | 14B for everything, one model loaded at a time (`OLLAMA_MAX_LOADED_MODELS=1`); 7B kept as a manual fast option |
 | NuGet cache | Lost on restart | `NUGET_PACKAGES` on `/workspace` |
 | Background services | Died with the terminal | Started with `nohup setsid` |
